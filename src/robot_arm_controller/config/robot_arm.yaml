@@ -1,0 +1,34 @@
+dynamixel_arm_controller:
+  ros__parameters:
+    # X-series + Protocol 2.0 example. Check your model's e-Manual control table.
+    device_name: /dev/ttyUSB0
+    baud_rate: 1000000
+    protocol_version: 2.0
+
+    # Two arm joints and one position-controlled gripper motor.
+    joint_names: [joint1, joint2, gripper_joint]
+    motor_ids: [1, 2, 3]
+    # Wizard: ID 1/2 = XD430-T350 (1001), ID 3 = XM430-W350 (1020).
+    expected_model_numbers: [1001, 1001, 1020]
+    # Position Control Mode must be 3 for all motors.
+    expected_operating_modes: [3, 3, 3]
+
+    # ROS positive rotation direction relative to each Dynamixel's raw tick direction.
+    direction: [1.0, 1.0, 1.0]
+    zero_position_ticks: [2048, 2048, 2048]
+    radians_per_tick: [0.001533981, 0.001533981, 0.001533981]
+    # Gripper limits are intentionally narrow placeholders. Calibrate before use.
+    min_position_rad: [-3.14, -1.57, -0.25]
+    max_position_rad: [ 3.14,  1.57,  0.25]
+
+    # Default addresses for many X-series motors in position-control mode.
+    torque_enable_address: 64
+    operating_mode_address: 11
+    goal_position_address: 116
+    present_position_address: 132
+    position_data_length: 4
+
+    # Keep false until IDs, limits, directions, and zero positions are verified.
+    auto_enable_torque: false
+    disable_torque_on_shutdown: true
+    state_publish_rate_hz: 20.0
