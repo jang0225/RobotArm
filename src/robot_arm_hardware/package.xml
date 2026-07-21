@@ -1,20 +1,17 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>robot_arm_controller</name>
+  <name>robot_arm_hardware</name>
   <version>0.1.0</version>
-  <description>ROS 2 C++ controller for a Dynamixel-based robot arm.</description>
+  <description>ros2_control hardware plugin for the Dynamixel robot arm.</description>
   <maintainer email="maintainer@example.com">Robot Arm Maintainer</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
-
+  <depend>hardware_interface</depend>
+  <depend>pluginlib</depend>
   <depend>rclcpp</depend>
-  <depend>trajectory_msgs</depend>
-
-  <build_depend>rosidl_default_generators</build_depend>
-  <exec_depend>rosidl_default_runtime</exec_depend>
-
-  <member_of_group>rosidl_interface_packages</member_of_group>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>dynamixel_sdk</depend>
 
   <export>
     <build_type>ament_cmake</build_type>

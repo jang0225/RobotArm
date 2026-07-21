@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<library path="robot_arm_hardware">
+  <class
+    name="robot_arm_hardware/DynamixelSystem"
+    type="robot_arm_hardware::DynamixelSystem"
+    base_class_type="hardware_interface::SystemInterface">
+    <description>Dynamixel Protocol 2.0 position hardware for a three-motor robot arm.</description>
+  </class>
+</library>

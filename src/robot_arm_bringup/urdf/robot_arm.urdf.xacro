@@ -1,0 +1,158 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="dynamixel_robot_arm">
+  <xacro:arg name="device_name" default="/dev/ttyUSB0"/>
+  <xacro:arg name="link1_length" default="0.25"/>
+  <xacro:arg name="link2_length" default="0.20"/>
+  <xacro:arg name="use_gripper" default="true"/>
+  <xacro:property name="link1_length" value="$(arg link1_length)"/>
+  <xacro:property name="link2_length" value="$(arg link2_length)"/>
+  <!-- Human-editable absolute motor angles in degrees. -->
+  <!-- Nearest encoder ticks to the measured joint centers. -->
+  <xacro:property name="joint1_zero_deg" value="179.296875"/> <!-- tick 2040 -->
+  <xacro:property name="joint2_zero_deg" value="224.384765625"/> <!-- tick 2553 -->
+  <xacro:property name="gripper_zero_deg" value="180.0"/> <!-- temporary tick 2048 -->
+  <xacro:property name="joint1_min_deg" value="80.84"/>
+  <xacro:property name="joint1_max_deg" value="277.84"/>
+  <xacro:property name="joint2_min_deg" value="111.25"/>
+  <xacro:property name="joint2_max_deg" value="337.52"/>
+  <!-- Temporary gripper range; replace after measuring the mechanism. -->
+  <xacro:property name="gripper_min_deg" value="165.68"/>
+  <xacro:property name="gripper_max_deg" value="194.32"/>
+
+  <xacro:property name="joint1_min_rad" value="${radians(joint1_min_deg - joint1_zero_deg)}"/>
+  <xacro:property name="joint1_max_rad" value="${radians(joint1_max_deg - joint1_zero_deg)}"/>
+  <xacro:property name="joint2_min_rad" value="${radians(joint2_min_deg - joint2_zero_deg)}"/>
+  <xacro:property name="joint2_max_rad" value="${radians(joint2_max_deg - joint2_zero_deg)}"/>
+  <xacro:property name="gripper_min_rad" value="${radians(gripper_min_deg - gripper_zero_deg)}"/>
+  <xacro:property name="gripper_max_rad" value="${radians(gripper_max_deg - gripper_zero_deg)}"/>
+
+  <!-- Placeholder geometry: replace lengths and meshes with the actual mechanism. -->
+  <link name="base_link">
+    <visual>
+      <geometry><box size="0.10 0.10 0.05"/></geometry>
+      <material name="base_gray"><color rgba="0.25 0.25 0.25 1"/></material>
+    </visual>
+  </link>
+
+  <link name="link1">
+    <visual>
+      <origin xyz="${float(link1_length) / 2.0} 0 0"/>
+      <geometry><box size="${link1_length} 0.04 0.04"/></geometry>
+      <material name="arm_blue"><color rgba="0.1 0.4 0.8 1"/></material>
+    </visual>
+  </link>
+
+  <joint name="joint1" type="revolute">
+    <parent link="base_link"/>
+    <child link="link1"/>
+    <origin xyz="0 0 0.04"/>
+    <axis xyz="0 0 1"/>
+    <!-- Measured 78.84..279.84 deg; limits include a 2 deg safety margin. -->
+    <limit lower="${joint1_min_rad}" upper="${joint1_max_rad}" velocity="1.0" effort="5.0"/>
+  </joint>
+
+  <link name="link2">
+    <visual>
+      <origin xyz="${float(link2_length) / 2.0} 0 0"/>
+      <geometry><box size="${link2_length} 0.035 0.035"/></geometry>
+      <material name="arm_orange"><color rgba="0.9 0.4 0.1 1"/></material>
+    </visual>
+  </link>
+
+  <joint name="joint2" type="revolute">
+    <parent link="link1"/>
+    <child link="link2"/>
+    <origin xyz="${link1_length} 0 0"/>
+    <axis xyz="0 0 1"/>
+    <!-- Measured 109.25..339.52 deg; limits include a 2 deg safety margin. -->
+    <limit lower="${joint2_min_rad}" upper="${joint2_max_rad}" velocity="1.0" effort="5.0"/>
+  </joint>
+
+  <link name="gripper_link">
+    <visual>
+      <origin xyz="0.035 0 0"/>
+      <geometry><box size="0.07 0.06 0.025"/></geometry>
+      <material name="gripper_gray"><color rgba="0.4 0.4 0.4 1"/></material>
+    </visual>
+  </link>
+
+  <xacro:if value="$(arg use_gripper)">
+    <joint name="gripper_joint" type="revolute">
+      <parent link="link2"/>
+      <child link="gripper_link"/>
+      <origin xyz="${link2_length} 0 0"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="${gripper_min_rad}" upper="${gripper_max_rad}" velocity="0.5" effort="5.0"/>
+    </joint>
+  </xacro:if>
+  <xacro:unless value="$(arg use_gripper)">
+    <joint name="gripper_fixed_joint" type="fixed">
+      <parent link="link2"/>
+      <child link="gripper_link"/>
+      <origin xyz="${link2_length} 0 0"/>
+    </joint>
+  </xacro:unless>
+
+  <ros2_control name="DynamixelRobotArm" type="system">
+    <hardware>
+      <plugin>robot_arm_hardware/DynamixelSystem</plugin>
+      <param name="device_name">$(arg device_name)</param>
+      <param name="baud_rate">1000000</param>
+      <param name="protocol_version">2.0</param>
+      <param name="drive_mode_address">10</param>
+      <param name="operating_mode_address">11</param>
+      <param name="torque_enable_address">64</param>
+      <param name="goal_position_address">116</param>
+      <param name="present_velocity_address">128</param>
+      <param name="present_position_address">132</param>
+      <param name="velocity_rad_s_per_raw_unit">0.023980824</param>
+    </hardware>
+
+    <joint name="joint1">
+      <param name="motor_id">1</param>
+      <param name="expected_model">1001</param>
+      <param name="expected_operating_mode">3</param>
+      <param name="expected_drive_mode">0</param>
+      <param name="zero_ticks">2040</param>
+      <param name="direction">1.0</param>
+      <param name="radians_per_tick">0.001533981</param>
+      <command_interface name="position">
+        <param name="min">${joint1_min_rad}</param><param name="max">${joint1_max_rad}</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="joint2">
+      <param name="motor_id">2</param>
+      <param name="expected_model">1001</param>
+      <param name="expected_operating_mode">3</param>
+      <param name="expected_drive_mode">0</param>
+      <param name="zero_ticks">2553</param>
+      <param name="direction">1.0</param>
+      <param name="radians_per_tick">0.001533981</param>
+      <command_interface name="position">
+        <param name="min">${joint2_min_rad}</param><param name="max">${joint2_max_rad}</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <xacro:if value="$(arg use_gripper)">
+      <joint name="gripper_joint">
+        <param name="motor_id">3</param>
+        <param name="expected_model">1020</param>
+        <param name="expected_operating_mode">3</param>
+        <param name="expected_drive_mode">0</param>
+        <param name="zero_ticks">2048</param>
+        <param name="direction">1.0</param>
+        <param name="radians_per_tick">0.001533981</param>
+        <command_interface name="position">
+          <param name="min">${gripper_min_rad}</param><param name="max">${gripper_max_rad}</param>
+        </command_interface>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+      </joint>
+    </xacro:if>
+  </ros2_control>
+</robot>
