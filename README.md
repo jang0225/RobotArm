@@ -105,16 +105,18 @@ ros2 run robot_arm_controller fish_motion_node --ros-args \
   -p joint2_amplitude_deg:=8.0 \
   -p phase_lag_deg:=60.0 \
   -p period_sec:=4.0 \
-  -p cycles:=2 \
+  -p cycles:=10 \
   -p center_duration_sec:=5.0
 ```
 
 노드는 먼저 중앙으로 이동하고, 두 관절을 위상차를 두어 흔든 뒤 중앙으로 복귀합니다.
 
+실행 옵션을 생략하면 `joint1 = 15°`, `joint2 = 30°`, 10회 왕복으로 동작합니다.
+
 - `joint1_amplitude_deg`, `joint2_amplitude_deg`: 관절별 진폭
 - `phase_lag_deg`: `joint2`가 뒤따르는 위상차
 - `period_sec`: 한 번 왕복하는 시간
-- `cycles`: 왕복 횟수
+- `cycles`: 왕복 횟수(기본 10회, 최대 100회)
 - `center_duration_sec`: 시작 시 중앙까지 이동하는 시간
 
 ## 전체 3축 실행

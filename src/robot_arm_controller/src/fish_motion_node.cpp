@@ -21,12 +21,12 @@ public:
   FishMotionNode()
   : Node("fish_motion_node")
   {
-    joint1_amplitude_deg_ = declare_parameter<double>("joint1_amplitude_deg", 8.0);
-    joint2_amplitude_deg_ = declare_parameter<double>("joint2_amplitude_deg", 15.0);
+    joint1_amplitude_deg_ = declare_parameter<double>("joint1_amplitude_deg", 15.0);
+    joint2_amplitude_deg_ = declare_parameter<double>("joint2_amplitude_deg", 30.0);
     phase_lag_deg_ = declare_parameter<double>("phase_lag_deg", 60.0);
     period_sec_ = declare_parameter<double>("period_sec", 2.5);
     center_duration_sec_ = declare_parameter<double>("center_duration_sec", 3.0);
-    cycles_ = declare_parameter<int>("cycles", 3);
+    cycles_ = declare_parameter<int>("cycles", 10);
     samples_per_cycle_ = declare_parameter<int>("samples_per_cycle", 20);
     const auto output_topic = declare_parameter<std::string>(
       "output_topic", "/arm_trajectory_controller/joint_trajectory");
@@ -68,8 +68,8 @@ private:
     {
       throw std::invalid_argument("phase and duration parameters must be finite and positive");
     }
-    if (cycles_ < 1 || cycles_ > 20 || samples_per_cycle_ < 8 || samples_per_cycle_ > 200) {
-      throw std::invalid_argument("cycles must be 1..20 and samples_per_cycle must be 8..200");
+    if (cycles_ < 1 || cycles_ > 100 || samples_per_cycle_ < 8 || samples_per_cycle_ > 200) {
+      throw std::invalid_argument("cycles must be 1..100 and samples_per_cycle must be 8..200");
     }
   }
 
