@@ -1,4 +1,4 @@
-# Joint names to command, for example [joint1, joint2].
+# Joint names to command: joint1, joint2, joint3, and/or gripper_joint.
 string[] joint_names
 
 # Target angles in degrees. Zero degrees is the calibrated joint center.

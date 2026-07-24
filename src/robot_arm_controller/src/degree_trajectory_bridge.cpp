@@ -21,12 +21,21 @@ public:
   DegreeTrajectoryBridge()
   : Node("degree_trajectory_bridge")
   {
+    const bool include_gripper = declare_parameter<bool>("include_gripper", true);
+    std::vector<std::string> default_joint_names{"joint1", "joint2", "joint3"};
+    std::vector<double> default_min_positions{-98.456875, -113.134766, -105.055};
+    std::vector<double> default_max_positions{98.543125, 113.135234, 93.535};
+    if (include_gripper) {
+      default_joint_names.push_back("gripper_joint");
+      default_min_positions.push_back(-5.0);
+      default_max_positions.push_back(5.0);
+    }
     joint_names_ = declare_parameter<std::vector<std::string>>(
-      "joint_names", {"joint1", "joint2"});
+      "joint_names", default_joint_names);
     min_positions_deg_ = declare_parameter<std::vector<double>>(
-      "min_position_deg", {-98.456875, -113.134766});
+      "min_position_deg", default_min_positions);
     max_positions_deg_ = declare_parameter<std::vector<double>>(
-      "max_position_deg", {98.543125, 113.135234});
+      "max_position_deg", default_max_positions);
     const auto output_topic = declare_parameter<std::string>(
       "output_topic", "/arm_trajectory_controller/joint_trajectory");
 

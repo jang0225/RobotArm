@@ -23,6 +23,9 @@ public:
   {
     joint1_amplitude_deg_ = declare_parameter<double>("joint1_amplitude_deg", 15.0);
     joint2_amplitude_deg_ = declare_parameter<double>("joint2_amplitude_deg", 30.0);
+    joint3_amplitude_deg_ = declare_parameter<double>("joint3_amplitude_deg", 40.0);
+    gripper_amplitude_deg_ = declare_parameter<double>("gripper_amplitude_deg", 3.0);
+    include_gripper_ = declare_parameter<bool>("include_gripper", true);
     phase_lag_deg_ = declare_parameter<double>("phase_lag_deg", 60.0);
     period_sec_ = declare_parameter<double>("period_sec", 2.5);
     center_duration_sec_ = declare_parameter<double>("center_duration_sec", 3.0);
@@ -37,8 +40,10 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "Preparing fish motion: amplitudes=(%.1f, %.1f) deg, period=%.2f s, cycles=%d",
-      joint1_amplitude_deg_, joint2_amplitude_deg_, period_sec_, cycles_);
+      "Preparing fish motion: amplitudes=(%.1f, %.1f, %.1f, %.1f) deg, "
+      "gripper=%s, period=%.2f s, cycles=%d",
+      joint1_amplitude_deg_, joint2_amplitude_deg_, joint3_amplitude_deg_,
+      gripper_amplitude_deg_, include_gripper_ ? "on" : "off", period_sec_, cycles_);
   }
 
 private:
@@ -62,6 +67,16 @@ private:
       joint2_amplitude_deg_ > 113.0)
     {
       throw std::invalid_argument("joint2_amplitude_deg must be within 0..113 degrees");
+    }
+    if (!std::isfinite(joint3_amplitude_deg_) || joint3_amplitude_deg_ < 0.0 ||
+      joint3_amplitude_deg_ > 93.0)
+    {
+      throw std::invalid_argument("joint3_amplitude_deg must be within 0..93 degrees");
+    }
+    if (!std::isfinite(gripper_amplitude_deg_) || gripper_amplitude_deg_ < 0.0 ||
+      gripper_amplitude_deg_ > 5.0)
+    {
+      throw std::invalid_argument("gripper_amplitude_deg must be within 0..5 degrees");
     }
     if (!std::isfinite(phase_lag_deg_) || !std::isfinite(period_sec_) || period_sec_ <= 0.0 ||
       !std::isfinite(center_duration_sec_) || center_duration_sec_ <= 0.0)
@@ -87,10 +102,16 @@ private:
 
     trajectory_msgs::msg::JointTrajectory trajectory;
     trajectory.header.stamp = now();
-    trajectory.joint_names = {"joint1", "joint2"};
+    trajectory.joint_names = {"joint1", "joint2", "joint3"};
+    if (include_gripper_) {
+      trajectory.joint_names.push_back("gripper_joint");
+    }
 
     trajectory_msgs::msg::JointTrajectoryPoint center;
-    center.positions = {0.0, 0.0};
+    center.positions = {0.0, 0.0, 0.0};
+    if (include_gripper_) {
+      center.positions.push_back(0.0);
+    }
     center.time_from_start = duration_from_seconds(center_duration_sec_);
     trajectory.points.push_back(center);
 
@@ -104,11 +125,20 @@ private:
       const double envelope = std::sin(robot_arm_controller::angle_utils::kPi * progress);
       const double joint1_deg = envelope * joint1_amplitude_deg_ * std::sin(phase);
       const double joint2_deg = envelope * joint2_amplitude_deg_ * std::sin(phase - phase_lag);
+      const double joint3_deg =
+        envelope * joint3_amplitude_deg_ * std::sin(phase - 2.0 * phase_lag);
+      const double gripper_deg =
+        envelope * gripper_amplitude_deg_ * std::sin(phase - 3.0 * phase_lag);
 
       trajectory_msgs::msg::JointTrajectoryPoint point;
       point.positions = {
         robot_arm_controller::angle_utils::degrees_to_radians(joint1_deg),
-        robot_arm_controller::angle_utils::degrees_to_radians(joint2_deg)};
+        robot_arm_controller::angle_utils::degrees_to_radians(joint2_deg),
+        robot_arm_controller::angle_utils::degrees_to_radians(joint3_deg)};
+      if (include_gripper_) {
+        point.positions.push_back(
+          robot_arm_controller::angle_utils::degrees_to_radians(gripper_deg));
+      }
       point.time_from_start = duration_from_seconds(
         center_duration_sec_ + progress * cycles_ * period_sec_);
       trajectory.points.push_back(std::move(point));
@@ -117,13 +147,16 @@ private:
     publisher_->publish(trajectory);
     publish_timer_->cancel();
     RCLCPP_INFO(
-      get_logger(), "Published %zu points; returning both joints to 0 deg",
+      get_logger(), "Published %zu points; returning commanded joints to 0 deg",
       trajectory.points.size());
     exit_timer_ = create_wall_timer(500ms, []() {rclcpp::shutdown();});
   }
 
   double joint1_amplitude_deg_;
   double joint2_amplitude_deg_;
+  double joint3_amplitude_deg_;
+  double gripper_amplitude_deg_;
+  bool include_gripper_;
   double phase_lag_deg_;
   double period_sec_;
   double center_duration_sec_;

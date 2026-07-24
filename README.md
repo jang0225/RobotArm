@@ -1,6 +1,6 @@
 # ROS 2 Dynamixel Robot Arm
 
-ROS 2 Humble과 C++로 Dynamixel 로봇팔을 제어하는 프로젝트입니다. ID 1·2는 관절, ID 3은 그리퍼이며 제어 경로는 `ros2_control` 하나로 통일되어 있습니다.
+ROS 2 Humble과 C++로 Dynamixel 로봇팔을 제어하는 프로젝트입니다. ID 1·2·3은 관절, ID 4는 그리퍼이며 제어 경로는 `ros2_control` 하나로 통일되어 있습니다.
 
 ## 구성
 
@@ -17,7 +17,8 @@ src/
 |---:|---|---|---|
 | 1 | XD430-T350 | `joint1` | 3 / 0 |
 | 2 | XD430-T350 | `joint2` | 3 / 0 |
-| 3 | XM430-W350 | `gripper_joint` | 3 / 0 |
+| 3 | XM430-W350 | `joint3` | 3 / 0 |
+| 4 | XM430-W350 | `gripper_joint` | 3 / 4 |
 
 통신은 Protocol 2.0, 1 Mbps, 기본 장치 `/dev/ttyUSB0`을 사용합니다. Dynamixel Wizard는 ROS 노드를 실행하기 전에 종료해야 합니다.
 
@@ -44,7 +45,7 @@ sudo usermod -aG dialout "$USER"
 
 ## 안전한 arm-only 실행
 
-그리퍼 범위를 아직 측정하지 않았으므로 현재는 ID 3에 torque를 걸지 않는 arm-only 모드를 사용합니다.
+그리퍼를 제외하고 세 관절만 시험하려면 ID 1·2·3만 활성화하는 arm-only 모드를 사용합니다.
 
 ```bash
 cd ~/robotarm
@@ -53,7 +54,7 @@ source install/setup.bash
 ros2 launch robot_arm_bringup arm_only.launch.py
 ```
 
-이 launch는 하드웨어 상태를 읽은 후 그 위치를 초기 목표로 설정하고 ID 1·2 torque를 활성화합니다. 로봇을 고정하고 주변을 비운 상태에서 실행하세요.
+이 launch는 하드웨어 상태를 읽은 후 그 위치를 초기 목표로 설정하고 ID 1·2·3 torque를 활성화합니다. 로봇을 고정하고 주변을 비운 상태에서 실행하세요.
 
 상태 확인:
 
@@ -73,6 +74,8 @@ ros2 topic echo /joint_states
 |---|---:|---:|
 | `joint1` | 179.296875° / 2040 | -98.456875° ~ 98.543125° |
 | `joint2` | 224.384766° / 2553 | -113.134766° ~ 113.135234° |
+| `joint3` | 163.125° / 1856 | -105.055° ~ 93.535° |
+| `gripper_joint` | 임시 2305 tick | -5° ~ 5° |
 
 한 관절을 3초 동안 5도로 이동:
 
@@ -82,19 +85,19 @@ ros2 topic pub --once /joint_commands_deg \
   "{joint_names: [joint1], positions_deg: [5.0], duration_sec: 3.0}"
 ```
 
-두 관절을 동시에 이동:
+네 모터를 동시에 이동:
 
 ```bash
 ros2 topic pub --once /joint_commands_deg \
   robot_arm_controller/msg/JointCommandDegrees \
-  "{joint_names: [joint1, joint2], positions_deg: [5.0, -5.0], duration_sec: 3.0}"
+  "{joint_names: [joint1, joint2, joint3, gripper_joint], positions_deg: [5.0, -5.0, 8.0, 2.0], duration_sec: 3.0}"
 ```
 
-`[0.0, 0.0]`은 두 관절의 중앙입니다. 현재 위치와 멀다면 작은 목표를 긴 시간으로 나누어 보내세요. 제한을 벗어난 degree 명령은 변환 노드와 하드웨어 플러그인에서 거부됩니다.
+`0°`는 각 모터의 보정된 중앙입니다. 현재 위치와 멀다면 작은 목표를 긴 시간으로 나누어 보내세요. 제한을 벗어난 degree 명령은 변환 노드와 하드웨어 플러그인에서 거부됩니다.
 
 ## 물고기처럼 흔들리는 궤적
 
-`arm_only.launch.py` 실행 중 다른 터미널에서 작고 느린 설정부터 시험합니다.
+네 모터용 `ros2_control.launch.py` 실행 중 다른 터미널에서 작고 느린 설정부터 시험합니다.
 
 ```bash
 cd ~/robotarm
@@ -103,29 +106,35 @@ source install/setup.bash
 ros2 run robot_arm_controller fish_motion_node --ros-args \
   -p joint1_amplitude_deg:=4.0 \
   -p joint2_amplitude_deg:=8.0 \
+  -p joint3_amplitude_deg:=12.0 \
+  -p gripper_amplitude_deg:=2.0 \
   -p phase_lag_deg:=60.0 \
   -p period_sec:=4.0 \
   -p cycles:=10 \
   -p center_duration_sec:=5.0
 ```
 
-노드는 먼저 중앙으로 이동하고, 두 관절을 위상차를 두어 흔든 뒤 중앙으로 복귀합니다.
+노드는 먼저 중앙으로 이동하고, 세 관절과 그리퍼를 차례로 위상차를 두어 흔든 뒤 중앙으로 복귀합니다.
 
-실행 옵션을 생략하면 `joint1 = 15°`, `joint2 = 30°`, 10회 왕복으로 동작합니다.
+실행 옵션을 생략하면 진폭 `15° / 30° / 40° / 3°`, 10회 왕복으로 동작합니다.
 
-- `joint1_amplitude_deg`, `joint2_amplitude_deg`: 관절별 진폭
+- `joint1_amplitude_deg`, `joint2_amplitude_deg`, `joint3_amplitude_deg`: 관절별 진폭
+- `gripper_amplitude_deg`: ID 4의 임시 진폭, 최대 5도
+- `include_gripper`: 그리퍼 포함 여부. arm-only에서는 `false`로 지정
 - `phase_lag_deg`: `joint2`가 뒤따르는 위상차
 - `period_sec`: 한 번 왕복하는 시간
 - `cycles`: 왕복 횟수(기본 10회, 최대 100회)
 - `center_duration_sec`: 시작 시 중앙까지 이동하는 시간
 
-## 전체 3축 실행
+## 전체 4모터 실행
 
-그리퍼 조립 후 절대 최소·최대 각도와 중앙 tick을 측정하여 [`robot_arm.urdf.xacro`](src/robot_arm_bringup/urdf/robot_arm.urdf.xacro)의 gripper 값을 수정한 다음 실행합니다.
+현재 ID 4는 실행 시 확인한 2305 tick을 임시 0도로 사용하고 `±5°`로 제한됩니다. 현재 USB 포트명을 확인한 뒤 실행합니다.
 
 ```bash
-ros2 launch robot_arm_bringup ros2_control.launch.py
+ros2 launch robot_arm_bringup ros2_control.launch.py device_name:=/dev/ttyUSB1
 ```
+
+그리퍼 조립 후 절대 최소·최대 각도와 중앙 tick을 다시 측정하여 [`robot_arm.urdf.xacro`](src/robot_arm_bringup/urdf/robot_arm.urdf.xacro)의 임시 값을 교체하세요.
 
 표준 radian 궤적은 `/arm_trajectory_controller/joint_trajectory`에 직접 보낼 수도 있습니다. FSS나 MoveIt 2는 이 표준 controller 인터페이스에 연결하면 됩니다.
 

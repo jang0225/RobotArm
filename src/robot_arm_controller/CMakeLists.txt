@@ -9,6 +9,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 find_package(ament_cmake REQUIRED)
+find_package(builtin_interfaces REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
@@ -28,7 +29,7 @@ target_link_libraries(degree_trajectory_bridge "${cpp_typesupport_target}")
 add_executable(fish_motion_node src/fish_motion_node.cpp)
 target_compile_features(fish_motion_node PUBLIC cxx_std_17)
 target_include_directories(fish_motion_node PRIVATE include)
-ament_target_dependencies(fish_motion_node rclcpp trajectory_msgs)
+ament_target_dependencies(fish_motion_node builtin_interfaces rclcpp trajectory_msgs)
 
 install(TARGETS degree_trajectory_bridge fish_motion_node
   DESTINATION lib/${PROJECT_NAME}

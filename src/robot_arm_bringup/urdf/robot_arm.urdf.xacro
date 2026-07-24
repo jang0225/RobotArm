@@ -3,28 +3,32 @@
   <xacro:arg name="device_name" default="/dev/ttyUSB0"/>
   <xacro:arg name="link1_length" default="0.25"/>
   <xacro:arg name="link2_length" default="0.20"/>
+  <xacro:arg name="link3_length" default="0.15"/>
   <xacro:arg name="use_gripper" default="true"/>
   <xacro:property name="link1_length" value="$(arg link1_length)"/>
   <xacro:property name="link2_length" value="$(arg link2_length)"/>
+  <xacro:property name="link3_length" value="$(arg link3_length)"/>
   <!-- Human-editable absolute motor angles in degrees. -->
   <!-- Nearest encoder ticks to the measured joint centers. -->
   <xacro:property name="joint1_zero_deg" value="179.296875"/> <!-- tick 2040 -->
   <xacro:property name="joint2_zero_deg" value="224.384765625"/> <!-- tick 2553 -->
-  <xacro:property name="gripper_zero_deg" value="180.0"/> <!-- temporary tick 2048 -->
+  <xacro:property name="joint3_zero_deg" value="163.125"/> <!-- tick 1856 -->
   <xacro:property name="joint1_min_deg" value="80.84"/>
   <xacro:property name="joint1_max_deg" value="277.84"/>
   <xacro:property name="joint2_min_deg" value="111.25"/>
   <xacro:property name="joint2_max_deg" value="337.52"/>
-  <!-- Temporary gripper range; replace after measuring the mechanism. -->
-  <xacro:property name="gripper_min_deg" value="165.68"/>
-  <xacro:property name="gripper_max_deg" value="194.32"/>
+  <xacro:property name="joint3_min_deg" value="58.07"/>
+  <xacro:property name="joint3_max_deg" value="256.66"/>
 
   <xacro:property name="joint1_min_rad" value="${radians(joint1_min_deg - joint1_zero_deg)}"/>
   <xacro:property name="joint1_max_rad" value="${radians(joint1_max_deg - joint1_zero_deg)}"/>
   <xacro:property name="joint2_min_rad" value="${radians(joint2_min_deg - joint2_zero_deg)}"/>
   <xacro:property name="joint2_max_rad" value="${radians(joint2_max_deg - joint2_zero_deg)}"/>
-  <xacro:property name="gripper_min_rad" value="${radians(gripper_min_deg - gripper_zero_deg)}"/>
-  <xacro:property name="gripper_max_rad" value="${radians(gripper_max_deg - gripper_zero_deg)}"/>
+  <xacro:property name="joint3_min_rad" value="${radians(joint3_min_deg - joint3_zero_deg)}"/>
+  <xacro:property name="joint3_max_rad" value="${radians(joint3_max_deg - joint3_zero_deg)}"/>
+  <!-- ID 4 temporary center is the measured startup position, tick 2305. -->
+  <xacro:property name="gripper_min_rad" value="${radians(-5.0)}"/>
+  <xacro:property name="gripper_max_rad" value="${radians(5.0)}"/>
 
   <!-- Placeholder geometry: replace lengths and meshes with the actual mechanism. -->
   <link name="base_link">
@@ -68,6 +72,23 @@
     <limit lower="${joint2_min_rad}" upper="${joint2_max_rad}" velocity="1.0" effort="5.0"/>
   </joint>
 
+  <link name="link3">
+    <visual>
+      <origin xyz="${float(link3_length) / 2.0} 0 0"/>
+      <geometry><box size="${link3_length} 0.03 0.03"/></geometry>
+      <material name="arm_green"><color rgba="0.1 0.7 0.35 1"/></material>
+    </visual>
+  </link>
+
+  <joint name="joint3" type="revolute">
+    <parent link="link2"/>
+    <child link="link3"/>
+    <origin xyz="${link2_length} 0 0"/>
+    <axis xyz="0 0 1"/>
+    <!-- Measured 56.07..258.66 deg; limits include a 2 deg safety margin. -->
+    <limit lower="${joint3_min_rad}" upper="${joint3_max_rad}" velocity="1.0" effort="5.0"/>
+  </joint>
+
   <link name="gripper_link">
     <visual>
       <origin xyz="0.035 0 0"/>
@@ -78,18 +99,18 @@
 
   <xacro:if value="$(arg use_gripper)">
     <joint name="gripper_joint" type="revolute">
-      <parent link="link2"/>
+      <parent link="link3"/>
       <child link="gripper_link"/>
-      <origin xyz="${link2_length} 0 0"/>
+      <origin xyz="${link3_length} 0 0"/>
       <axis xyz="0 0 1"/>
       <limit lower="${gripper_min_rad}" upper="${gripper_max_rad}" velocity="0.5" effort="5.0"/>
     </joint>
   </xacro:if>
   <xacro:unless value="$(arg use_gripper)">
     <joint name="gripper_fixed_joint" type="fixed">
-      <parent link="link2"/>
+      <parent link="link3"/>
       <child link="gripper_link"/>
-      <origin xyz="${link2_length} 0 0"/>
+      <origin xyz="${link3_length} 0 0"/>
     </joint>
   </xacro:unless>
 
@@ -138,13 +159,28 @@
       <state_interface name="velocity"/>
     </joint>
 
+    <joint name="joint3">
+      <param name="motor_id">3</param>
+      <param name="expected_model">1020</param>
+      <param name="expected_operating_mode">3</param>
+      <param name="expected_drive_mode">0</param>
+      <param name="zero_ticks">1856</param>
+      <param name="direction">1.0</param>
+      <param name="radians_per_tick">0.001533981</param>
+      <command_interface name="position">
+        <param name="min">${joint3_min_rad}</param><param name="max">${joint3_max_rad}</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
     <xacro:if value="$(arg use_gripper)">
       <joint name="gripper_joint">
-        <param name="motor_id">3</param>
+        <param name="motor_id">4</param>
         <param name="expected_model">1020</param>
         <param name="expected_operating_mode">3</param>
-        <param name="expected_drive_mode">0</param>
-        <param name="zero_ticks">2048</param>
+        <param name="expected_drive_mode">4</param>
+        <param name="zero_ticks">2305</param>
         <param name="direction">1.0</param>
         <param name="radians_per_tick">0.001533981</param>
         <command_interface name="position">

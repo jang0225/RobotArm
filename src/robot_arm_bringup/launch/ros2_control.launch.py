@@ -58,6 +58,14 @@ def generate_launch_description():
     degree_bridge = Node(
         package="robot_arm_controller",
         executable="degree_trajectory_bridge",
+        parameters=[
+            {
+                "include_gripper": ParameterValue(
+                    use_gripper,
+                    value_type=bool,
+                )
+            }
+        ],
         output="screen",
     )
 
