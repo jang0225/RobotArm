@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <functional>
@@ -23,8 +24,8 @@ public:
   {
     const bool include_gripper = declare_parameter<bool>("include_gripper", true);
     std::vector<std::string> default_joint_names{"joint1", "joint2", "joint3"};
-    std::vector<double> default_min_positions{-98.456875, -113.134766, -105.055};
-    std::vector<double> default_max_positions{98.543125, 113.135234, 93.535};
+    std::vector<double> default_min_positions{-98.456875, -113.134766, -103.290234};
+    std::vector<double> default_max_positions{98.543125, 113.135234, 103.209766};
     if (include_gripper) {
       default_joint_names.push_back("gripper_joint");
       default_min_positions.push_back(-5.0);
@@ -83,19 +84,28 @@ private:
       }
       const auto joint = found->second;
       const double degrees = msg->positions_deg[i];
-      if (!std::isfinite(degrees) || degrees < min_positions_deg_[joint] ||
-        degrees > max_positions_deg_[joint])
-      {
+      if (!std::isfinite(degrees)) {
         RCLCPP_ERROR(
-          get_logger(), "%s command %.3f deg outside [%.3f, %.3f]",
-          msg->joint_names[i].c_str(), degrees, min_positions_deg_[joint],
-          max_positions_deg_[joint]);
-        return;
+          get_logger(), "%s command is not finite; skipping this joint",
+          msg->joint_names[i].c_str());
+        continue;
+      }
+      const double bounded_degrees = std::clamp(
+        degrees, min_positions_deg_[joint], max_positions_deg_[joint]);
+      if (bounded_degrees != degrees) {
+        RCLCPP_WARN(
+          get_logger(), "%s command %.3f deg saturated to %.3f deg",
+          msg->joint_names[i].c_str(), degrees, bounded_degrees);
       }
       trajectory.joint_names.push_back(msg->joint_names[i]);
       point.positions.push_back(
-        robot_arm_controller::angle_utils::degrees_to_radians(degrees));
+        robot_arm_controller::angle_utils::degrees_to_radians(bounded_degrees));
       point.velocities.push_back(0.0);
+    }
+
+    if (trajectory.joint_names.empty()) {
+      RCLCPP_ERROR(get_logger(), "No valid joint command to publish");
+      return;
     }
 
     const auto duration_nanoseconds = static_cast<int64_t>(

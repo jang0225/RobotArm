@@ -124,6 +124,7 @@ hardware_interface::CallbackReturn DynamixelSystem::on_init(
   velocity_states_.assign(joints_.size(), nan);
   position_commands_.assign(joints_.size(), nan);
   last_position_ticks_.assign(joints_.size(), std::numeric_limits<uint32_t>::max());
+  command_saturated_.assign(joints_.size(), false);
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -181,6 +182,7 @@ hardware_interface::CallbackReturn DynamixelSystem::on_activate(
   std::fill(
     last_position_ticks_.begin(), last_position_ticks_.end(),
     std::numeric_limits<uint32_t>::max());
+  std::fill(command_saturated_.begin(), command_saturated_.end(), false);
   if (write(rclcpp::Time(0), rclcpp::Duration(0, 0)) != hardware_interface::return_type::OK ||
     !set_torque(true))
   {
@@ -266,50 +268,76 @@ hardware_interface::return_type DynamixelSystem::read(
 hardware_interface::return_type DynamixelSystem::write(
   const rclcpp::Time &, const rclcpp::Duration &)
 {
-  std::vector<uint32_t> position_ticks;
-  position_ticks.reserve(joints_.size());
-  bool command_changed = false;
+  std::vector<uint32_t> position_ticks(joints_.size());
   for (std::size_t i = 0; i < joints_.size(); ++i) {
     const double command = position_commands_[i];
-    if (!std::isfinite(command) || command < joints_[i].min_position ||
-      command > joints_[i].max_position)
-    {
-      RCLCPP_ERROR(
-        logger_, "%s command %.4f outside [%.4f, %.4f]",
-        info_.joints[i].name.c_str(), command, joints_[i].min_position,
-        joints_[i].max_position);
-      return hardware_interface::return_type::ERROR;
+    double bounded_command = command;
+    if (!std::isfinite(command)) {
+      // A bad command on one interface must not stop valid commands for the
+      // other motors. Hold only the affected joint at its measured position.
+      bounded_command = std::isfinite(position_states_[i]) ?
+        std::clamp(position_states_[i], joints_[i].min_position, joints_[i].max_position) :
+        0.0;
+      if (!command_saturated_[i]) {
+        RCLCPP_ERROR(
+          logger_, "%s received a non-finite command; holding this joint only",
+          info_.joints[i].name.c_str());
+      }
+      command_saturated_[i] = true;
+    } else {
+      bounded_command = std::clamp(
+        command, joints_[i].min_position, joints_[i].max_position);
+      const bool saturated = bounded_command != command;
+      if (saturated && !command_saturated_[i]) {
+        RCLCPP_WARN(
+          logger_, "%s command %.9f saturated to %.9f within [%.9f, %.9f]",
+          info_.joints[i].name.c_str(), command, bounded_command,
+          joints_[i].min_position, joints_[i].max_position);
+      } else if (!saturated && command_saturated_[i]) {
+        RCLCPP_INFO(logger_, "%s command returned inside its limits", info_.joints[i].name.c_str());
+      }
+      command_saturated_[i] = saturated;
     }
+
     const double raw_value = static_cast<double>(joints_[i].zero_ticks) +
-      command / (joints_[i].direction * joints_[i].radians_per_tick);
-    if (raw_value < 0.0 || raw_value > 4095.0) {
-      RCLCPP_ERROR(logger_, "%s converted tick is outside [0, 4095]", info_.joints[i].name.c_str());
-      return hardware_interface::return_type::ERROR;
-    }
-    const auto ticks = static_cast<uint32_t>(std::llround(raw_value));
-    position_ticks.push_back(ticks);
-    command_changed = command_changed || ticks != last_position_ticks_[i];
-  }
-  if (!command_changed) {
-    return hardware_interface::return_type::OK;
+      bounded_command / (joints_[i].direction * joints_[i].radians_per_tick);
+    position_ticks[i] = static_cast<uint32_t>(
+      std::llround(std::clamp(raw_value, 0.0, 4095.0)));
   }
 
   dynamixel::GroupSyncWrite writer(port_handler_, packet_handler_, goal_position_address_, 4);
   std::vector<std::vector<uint8_t>> payloads;
   payloads.reserve(joints_.size());
+  std::vector<std::size_t> written_indices;
+  written_indices.reserve(joints_.size());
   for (std::size_t i = 0; i < joints_.size(); ++i) {
+    if (position_ticks[i] == last_position_ticks_[i]) {
+      continue;
+    }
     payloads.push_back(make_4byte_payload(position_ticks[i]));
     if (!writer.addParam(joints_[i].id, payloads.back().data())) {
-      RCLCPP_ERROR(logger_, "Failed to prepare write for ID %u", joints_[i].id);
-      return hardware_interface::return_type::ERROR;
+      // Keep preparing the packet so a local failure for one motor does not
+      // discard commands already prepared for the other motors.
+      RCLCPP_ERROR(
+        logger_, "Failed to prepare write for ID %u; other motor commands will continue",
+        joints_[i].id);
+      payloads.pop_back();
+      continue;
     }
+    written_indices.push_back(i);
   }
+  if (written_indices.empty()) {
+    return hardware_interface::return_type::OK;
+  }
+
   const int result = writer.txPacket();
   if (result != COMM_SUCCESS) {
     RCLCPP_ERROR(logger_, "Sync write failed: %s", packet_handler_->getTxRxResult(result));
     return hardware_interface::return_type::ERROR;
   }
-  last_position_ticks_ = std::move(position_ticks);
+  for (const auto i : written_indices) {
+    last_position_ticks_[i] = position_ticks[i];
+  }
   return hardware_interface::return_type::OK;
 }
 

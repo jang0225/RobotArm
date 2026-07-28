@@ -78,6 +78,7 @@ private:
   std::vector<double> velocity_states_;
   std::vector<double> position_commands_;
   std::vector<uint32_t> last_position_ticks_;
+  std::vector<bool> command_saturated_;
 
   dynamixel::PortHandler * port_handler_{nullptr};
   dynamixel::PacketHandler * packet_handler_{nullptr};

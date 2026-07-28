@@ -12,13 +12,13 @@
   <!-- Nearest encoder ticks to the measured joint centers. -->
   <xacro:property name="joint1_zero_deg" value="179.296875"/> <!-- tick 2040 -->
   <xacro:property name="joint2_zero_deg" value="224.384765625"/> <!-- tick 2553 -->
-  <xacro:property name="joint3_zero_deg" value="163.125"/> <!-- tick 1856 -->
+  <xacro:property name="joint3_zero_deg" value="208.740234375"/> <!-- tick 2375 -->
   <xacro:property name="joint1_min_deg" value="80.84"/>
   <xacro:property name="joint1_max_deg" value="277.84"/>
   <xacro:property name="joint2_min_deg" value="111.25"/>
   <xacro:property name="joint2_max_deg" value="337.52"/>
-  <xacro:property name="joint3_min_deg" value="58.07"/>
-  <xacro:property name="joint3_max_deg" value="256.66"/>
+  <xacro:property name="joint3_min_deg" value="105.45"/>
+  <xacro:property name="joint3_max_deg" value="311.95"/>
 
   <xacro:property name="joint1_min_rad" value="${radians(joint1_min_deg - joint1_zero_deg)}"/>
   <xacro:property name="joint1_max_rad" value="${radians(joint1_max_deg - joint1_zero_deg)}"/>
@@ -85,7 +85,7 @@
     <child link="link3"/>
     <origin xyz="${link2_length} 0 0"/>
     <axis xyz="0 0 1"/>
-    <!-- Measured 56.07..258.66 deg; limits include a 2 deg safety margin. -->
+    <!-- Measured 103.45..313.95 deg; limits include a 2 deg safety margin. -->
     <limit lower="${joint3_min_rad}" upper="${joint3_max_rad}" velocity="1.0" effort="5.0"/>
   </joint>
 
@@ -164,7 +164,7 @@
       <param name="expected_model">1020</param>
       <param name="expected_operating_mode">3</param>
       <param name="expected_drive_mode">0</param>
-      <param name="zero_ticks">1856</param>
+      <param name="zero_ticks">2375</param>
       <param name="direction">1.0</param>
       <param name="radians_per_tick">0.001533981</param>
       <command_interface name="position">
