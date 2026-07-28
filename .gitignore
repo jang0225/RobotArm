@@ -3,3 +3,4 @@ install/
 log/
 __pycache__/
 *.pyc
+symlink_install_manifest.txt

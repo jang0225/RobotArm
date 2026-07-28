@@ -69,9 +69,9 @@ private:
       throw std::invalid_argument("joint2_amplitude_deg must be within 0..113 degrees");
     }
     if (!std::isfinite(joint3_amplitude_deg_) || joint3_amplitude_deg_ < 0.0 ||
-      joint3_amplitude_deg_ > 93.0)
+      joint3_amplitude_deg_ > 103.0)
     {
-      throw std::invalid_argument("joint3_amplitude_deg must be within 0..93 degrees");
+      throw std::invalid_argument("joint3_amplitude_deg must be within 0..103 degrees");
     }
     if (!std::isfinite(gripper_amplitude_deg_) || gripper_amplitude_deg_ < 0.0 ||
       gripper_amplitude_deg_ > 5.0)
