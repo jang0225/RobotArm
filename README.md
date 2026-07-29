@@ -2,7 +2,7 @@
 
 ROS 2 Humble과 C++로 Dynamixel 로봇팔을 제어하는 프로젝트입니다. ID 1·2·3은 관절, ID 4는 그리퍼이며 제어 경로는 `ros2_control` 하나로 통일되어 있습니다.
 
-설계 과정, 보정값, 트러블슈팅 및 포트폴리오용 기술 요약은 [`PROJECT_DEVELOPMENT_LOG.md`](PROJECT_DEVELOPMENT_LOG.md)에 정리되어 있습니다.
+설계 과정, 보정값, 트러블슈팅 및 포트폴리오용 기술 요약은 [`PROJECT_DEVELOPMENT_LOG.md`](PROJECT_DEVELOPMENT_LOG.md)에 정리되어 있습니다. FSS와 함께 운용하는 방법은 [`FSS_INTEGRATION.md`](FSS_INTEGRATION.md)를 참고하세요.
 
 ## 구성
 
@@ -10,7 +10,7 @@ ROS 2 Humble과 C++로 Dynamixel 로봇팔을 제어하는 프로젝트입니다
 src/
 ├── robot_arm_hardware/    # Dynamixel SDK 기반 ros2_control 플러그인
 ├── robot_arm_bringup/     # URDF, controller 설정, launch
-└── robot_arm_controller/  # degree 명령 변환 및 물고기 궤적 노드
+└── robot_arm_controller/  # degree 변환, FSS 안전 연동 및 선택적 모터 시험 노드
 ```
 
 하드웨어 설정은 다음을 기준으로 합니다.
@@ -97,36 +97,19 @@ ros2 topic pub --once /joint_commands_deg \
 
 `0°`는 각 모터의 보정된 중앙입니다. 현재 위치와 멀다면 작은 목표를 긴 시간으로 나누어 보내세요. 제한을 벗어난 유한한 degree 명령은 해당 관절의 최소·최대값으로 자동 제한됩니다. 한 관절이 제한에 걸리거나 잘못된 값을 받아도 다른 관절의 명령은 계속 처리됩니다.
 
-## 물고기처럼 흔들리는 궤적
+## 선택적 반복 모터 시험
 
-네 모터용 `ros2_control.launch.py` 실행 중 다른 터미널에서 작고 느린 설정부터 시험합니다.
+`fish_motion_node`는 여러 모터의 반복 동작을 빠르게 확인하기 위한 보조 시험 도구입니다. 핵심 제어 경로에는 사용되지 않습니다.
 
 ```bash
-cd ~/robotarm
-source /opt/ros/humble/setup.bash
-source install/setup.bash
 ros2 run robot_arm_controller fish_motion_node --ros-args \
   -p joint1_amplitude_deg:=4.0 \
   -p joint2_amplitude_deg:=8.0 \
   -p joint3_amplitude_deg:=12.0 \
-  -p gripper_amplitude_deg:=2.0 \
-  -p phase_lag_deg:=60.0 \
   -p period_sec:=4.0 \
-  -p cycles:=10 \
-  -p center_duration_sec:=5.0
+  -p cycles:=3 \
+  -p include_gripper:=false
 ```
-
-노드는 먼저 중앙으로 이동하고, 세 관절과 그리퍼를 차례로 위상차를 두어 흔든 뒤 중앙으로 복귀합니다.
-
-실행 옵션을 생략하면 진폭 `15° / 30° / 40° / 3°`, 10회 왕복으로 동작합니다.
-
-- `joint1_amplitude_deg`, `joint2_amplitude_deg`, `joint3_amplitude_deg`: 관절별 진폭
-- `gripper_amplitude_deg`: ID 4의 임시 진폭, 최대 5도
-- `include_gripper`: 그리퍼 포함 여부. arm-only에서는 `false`로 지정
-- `phase_lag_deg`: `joint2`가 뒤따르는 위상차
-- `period_sec`: 한 번 왕복하는 시간
-- `cycles`: 왕복 횟수(기본 10회, 최대 100회)
-- `center_duration_sec`: 시작 시 중앙까지 이동하는 시간
 
 ## 전체 4모터 실행
 
@@ -138,7 +121,37 @@ ros2 launch robot_arm_bringup ros2_control.launch.py device_name:=/dev/ttyUSB1
 
 그리퍼 조립 후 절대 최소·최대 각도와 중앙 tick을 다시 측정하여 [`robot_arm.urdf.xacro`](src/robot_arm_bringup/urdf/robot_arm.urdf.xacro)의 임시 값을 교체하세요.
 
-표준 radian 궤적은 `/arm_trajectory_controller/joint_trajectory`에 직접 보낼 수도 있습니다. FSS나 MoveIt 2는 이 표준 controller 인터페이스에 연결하면 됩니다.
+표준 radian 궤적은 `/arm_trajectory_controller/joint_trajectory`에 직접 보낼 수도 있습니다.
+
+## FSS 연동 실행
+
+FSS 코드를 수정하지 않고 RobotArm을 overlay workspace로 빌드할 수 있습니다. 통합 모드에서는 모든 로봇팔 토픽이 `/robot_arm` 아래에 배치되고, FSS가 `ACTIVE`이며 health가 정상일 때만 요청 궤적이 controller로 전달됩니다.
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/FSS_FSW/install/setup.bash
+
+cd ~/robotarm
+colcon build --symlink-install
+source install/setup.bash
+
+ros2 launch robot_arm_bringup fss_robot_arm.launch.py \
+  device_name:=/dev/serial/by-id/YOUR_U2D2_DEVICE \
+  start_fss:=false \
+  arm_only:=true
+```
+
+기본값은 이미 실행 중인 FSS에 RobotArm만 연결합니다. FSS 전체 시스템도 같은 launch에서 시작하려면 사전 점검 후 `start_fss:=true`를 명시하세요.
+
+통합 모드의 degree 명령:
+
+```bash
+ros2 topic pub --once /robot_arm/joint_commands_deg \
+  robot_arm_controller/msg/JointCommandDegrees \
+  "{joint_names: [joint1, joint2, joint3], positions_deg: [5.0, 10.0, -5.0], duration_sec: 5.0}"
+```
+
+상세한 빌드 순서, 토픽 계약, FSS 모드별 동작 및 제한사항은 [`FSS_INTEGRATION.md`](FSS_INTEGRATION.md)에 정리되어 있습니다.
 
 ## 안전 주의사항
 

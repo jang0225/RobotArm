@@ -1,7 +1,7 @@
 # ROS 2 Dynamixel Robot Arm 개발 기록
 
 > 포트폴리오 작성과 기술 회고를 위한 문서
-> 최종 갱신: 2026-07-28
+> 최종 갱신: 2026-07-29
 
 ## 1. 프로젝트 개요
 
@@ -39,7 +39,7 @@ ROS 2 Humble과 C++를 사용해 Dynamixel 기반 로봇팔을 제어하는 프�
 src/
 ├── robot_arm_hardware/    # Dynamixel SDK 기반 ros2_control SystemInterface
 ├── robot_arm_bringup/     # Xacro/URDF, controller 설정, launch
-└── robot_arm_controller/  # degree 명령 변환 및 궤적 생성 노드
+└── robot_arm_controller/  # degree 변환, FSS 안전 연동 및 보조 시험 노드
 ```
 
 제어 흐름은 다음과 같다.
@@ -131,21 +131,9 @@ ros2 topic pub --once /joint_commands_deg \
 - `JointTrajectory` 메시지 발행
 - 일부 관절만 명령하는 partial joint goal 지원
 
-### 4.3 물고기 형태의 다관절 궤적
+### 4.3 반복 모터 시험 도구
 
-단일 목표 위치뿐 아니라 여러 관절이 위상차를 두고 반복적으로 움직이는 `fish_motion_node`를 추가했다.
-
-궤적 특징:
-
-- 세 관절에 서로 다른 진폭 적용
-- 관절 사이에 phase lag 적용
-- 주기와 반복 횟수를 ROS parameter로 변경
-- 시작 시 중앙으로 천천히 이동
-- 시작과 끝에서 envelope를 0으로 만들어 갑작스러운 충격 감소
-- 그리퍼 포함 여부 선택
-- 완료 후 중앙 위치로 복귀
-
-이 구현을 통해 개별 위치 명령에서 시간 기반 다관절 궤적 제어로 기능을 확장했다.
+`fish_motion_node`는 여러 모터의 반복 동작을 빠르게 확인하기 위한 보조 시험 도구로 추가했다. 실제 FSS 운용의 핵심 제어 경로에는 사용하지 않는다.
 
 ### 4.4 Arm-only와 전체 모터 실행 분리
 
@@ -200,21 +188,9 @@ sudo usermod -aG dialout "$USER"
 
 그룹 추가 후 다시 로그인하고, 실행 전에 실제 장치 이름을 확인하며 Dynamixel Wizard를 종료하도록 했다. 포트가 `/dev/ttyUSB0`과 `/dev/ttyUSB1` 사이에서 달라질 수 있으므로 launch argument로 지정할 수 있게 구성했다.
 
-### 5.3 Fish motion subscriber를 찾지 못함
+### 5.3 보조 모터 시험 노드 실행 순서
 
-#### 증상
-
-```text
-Trajectory controller subscriber was not found
-```
-
-#### 원인
-
-`fish_motion_node`만 실행하고 `arm_trajectory_controller`가 활성화된 bringup launch를 먼저 실행하지 않았다.
-
-#### 대응
-
-하드웨어 launch를 먼저 실행하고 controller가 `active` 상태인지 확인한 후 궤적 노드를 실행하도록 실행 순서를 정리했다. 궤적 노드에도 subscriber 대기와 오류 메시지를 추가했다.
+반복 시험 노드를 controller보다 먼저 실행해 subscriber를 찾지 못한 적이 있었다. 하드웨어 bringup과 controller의 `active` 상태를 먼저 확인하도록 실행 순서를 정리했다.
 
 ### 5.4 ID 1은 움직이지만 ID 2와 ID 3은 움직이지 않음
 
@@ -267,7 +243,22 @@ joint3 → -20° 그대로 실행
 
 이 변경으로 관절 제한은 여전히 지키면서 한 관절의 상한 도달이 다른 관절의 정상 동작을 막지 않게 했다.
 
-## 6. 안전 설계
+## 6. FSS 연동
+
+2026-07-29 `SNU-SMRL/FSS_FSW`를 수정하지 않고 RobotArm만 overlay로 확장하는 연동 구조를 추가했다.
+
+- `fss_arm_supervisor_node`가 `/system/mode`와 `/system/health` 구독
+- `ACTIVE`와 정상 health 조건을 만족할 때만 로봇팔 궤적 전달
+- mode/health timeout 또는 안전 모드 이탈 시 새 명령 차단
+- 차단 전환 시 최신 관절 측정 위치로 hold
+- 모든 로봇팔 노드를 `/robot_arm` namespace로 격리
+- degree 명령과 표준 `JointTrajectory`를 supervisor 입력으로 통합
+- FSS underlay가 없을 때는 supervisor를 생략하여 RobotArm 단독 빌드 유지
+- 기존 FSS에 RobotArm을 연결하고, 명시적 옵션으로만 FSS 전체를 함께 시작하는 `fss_robot_arm.launch.py` 추가
+
+통합 구조, 빌드 순서, 토픽 계약과 제한사항은 [`FSS_INTEGRATION.md`](FSS_INTEGRATION.md)에 별도로 기록했다.
+
+## 7. 안전 설계
 
 현재 적용된 안전 기능은 다음과 같다.
 
@@ -279,11 +270,12 @@ joint3 → -20° 그대로 실행
 - 종료 시 torque 비활성화
 - 미완성 그리퍼는 임시 `±5°` 제한
 - arm-only 모드로 그리퍼 torque 제외 가능
-- 궤적 시작과 종료 구간에 부드러운 envelope 적용
+- FSS 통합 시 운용 모드와 health를 통과한 궤적만 controller에 전달
+- FSS 통신 timeout과 안전 모드 전환 시 현재 관절 위치 hold
 
 `trajectory` path tolerance는 관절 간 결함 격리를 위해 비활성화했다. 따라서 실제 운용 단계에서는 `/joint_states` 기반의 관절별 watchdog, 전류·온도 감시 및 비상정지 로직을 별도로 추가해야 한다.
 
-## 7. 검증 기록
+## 8. 검증 기록
 
 ### 정적 및 빌드 검증
 
@@ -302,6 +294,8 @@ Summary: 3 packages finished
 ```
 
 추가로 `git diff --check`를 실행해 whitespace 오류가 없음을 확인했다.
+
+2026-07-29 FSS interface underlay를 source한 상태에서 supervisor를 포함해 다시 빌드했으며, 가짜 FSS mode/health와 joint state를 이용한 ROS 2 토픽 시험으로 허용·차단·hold 동작을 검증했다.
 
 ### 하드웨어 검증 절차
 
@@ -328,7 +322,7 @@ ros2 topic pub --once /joint_commands_deg \
 - `joint3`: -20° 목표 계속 수행
 - `Holding position due to state tolerance violation`으로 전체 궤적이 중단되지 않음
 
-## 8. Git 변경 이력
+## 9. Git 변경 이력
 
 주요 커밋:
 
@@ -336,12 +330,12 @@ ros2 topic pub --once /joint_commands_deg \
 |---|---|
 | `ba40097` | Initial commit |
 | `5cc042c` | 초기 기능 변경 |
-| `89fda6a` | Fish motion 수정 |
+| `89fda6a` | 반복 모터 시험 동작 수정 |
 | `88919bb` | Add third arm joint and gripper motor |
 
 2026-07-28 작업 내용에는 `joint3` 재보정과 관절별 포화·결함 격리 로직이 포함되어 있다. 커밋 전에는 `git diff`로 변경 범위를 확인하고 하드웨어 시험 결과를 이 문서에 추가한다.
 
-## 9. 포트폴리오용 핵심 요약
+## 10. 포트폴리오용 핵심 요약
 
 ### 한 줄 소개
 
@@ -354,9 +348,10 @@ ROS 2 `ros2_control`과 Dynamixel SDK를 이용해 3축 관절 및 그리퍼를 
 - URDF/Xacro 기반 관절 모델과 실측 제한 적용
 - 중앙을 `0°`로 사용하는 degree-radian-tick 변환 계층 구현
 - partial joint command와 다관절 trajectory 제어 구현
-- 위상차 기반 물고기 형태 반복 궤적 생성
 - 모터별 모델 및 제어 모드 시작 검증
 - 관절별 command saturation을 통한 결함 격리
+- FSS mode/health 기반 로봇팔 명령 게이트와 timeout hold 구현
+- FSS 소스 수정 없이 동작하는 ROS 2 underlay/overlay 통합 구조 설계
 
 ### 대표 문제 해결 사례
 
@@ -374,7 +369,7 @@ ROS 2 `ros2_control`과 Dynamixel SDK를 이용해 3축 관절 및 그리퍼를 
 - CMake / colcon
 - Git / GitHub
 
-## 10. 향후 개선 계획
+## 11. 향후 개선 계획
 
 - ID 4 그리퍼 조립 후 실제 중앙 tick과 가동 범위 재측정
 - 실제 링크 질량, 관성 및 collision geometry 반영
@@ -384,10 +379,11 @@ ROS 2 `ros2_control`과 Dynamixel SDK를 이용해 3축 관절 및 그리퍼를 
 - 다회전 및 방향 반전 관절을 위한 calibration 파일 분리
 - 동일한 제한값이 Xacro와 controller 코드에 중복되지 않도록 단일 YAML 설정으로 통합
 - MoveIt 2 연동과 충돌 없는 경로 계획
-- FSS 입력을 `JointTrajectory` 또는 action interface로 연결
+- FSS `EMERGENCY_STOP`에서 controller와 Dynamixel torque 비활성화
+- RobotArm health를 FSS manager의 전체 health에 포함하기 위한 interface 협의
 - 실제 하드웨어 반복 시험 결과와 오차 그래프 추가
 
-## 11. 기록 갱신 양식
+## 12. 기록 갱신 양식
 
 새로운 문제나 기능을 추가할 때 다음 형식으로 기록한다.
 

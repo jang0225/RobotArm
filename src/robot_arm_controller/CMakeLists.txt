@@ -11,8 +11,11 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+find_package(fss_interfaces QUIET)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/JointCommandDegrees.msg"
@@ -31,7 +34,27 @@ target_compile_features(fish_motion_node PUBLIC cxx_std_17)
 target_include_directories(fish_motion_node PRIVATE include)
 ament_target_dependencies(fish_motion_node builtin_interfaces rclcpp trajectory_msgs)
 
-install(TARGETS degree_trajectory_bridge fish_motion_node
+set(robot_arm_controller_targets degree_trajectory_bridge fish_motion_node)
+
+if(fss_interfaces_FOUND)
+  add_executable(fss_arm_supervisor_node src/fss_arm_supervisor_node.cpp)
+  target_compile_features(fss_arm_supervisor_node PUBLIC cxx_std_17)
+  ament_target_dependencies(
+    fss_arm_supervisor_node
+    builtin_interfaces
+    fss_interfaces
+    rclcpp
+    sensor_msgs
+    std_msgs
+    trajectory_msgs
+  )
+  list(APPEND robot_arm_controller_targets fss_arm_supervisor_node)
+  message(STATUS "fss_interfaces found: building fss_arm_supervisor_node")
+else()
+  message(STATUS "fss_interfaces not found: skipping optional FSS integration node")
+endif()
+
+install(TARGETS ${robot_arm_controller_targets}
   DESTINATION lib/${PROJECT_NAME}
 )
 

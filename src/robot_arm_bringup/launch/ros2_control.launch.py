@@ -5,7 +5,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, EmitEvent, RegisterEventHandler
 from launch.event_handlers import OnProcessExit
 from launch.events import Shutdown
-from launch.substitutions import Command, LaunchConfiguration
+from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
@@ -16,6 +16,13 @@ def generate_launch_description():
     device_name = LaunchConfiguration("device_name")
     use_gripper = LaunchConfiguration("use_gripper")
     controllers_file = LaunchConfiguration("controllers_file")
+    namespace = LaunchConfiguration("namespace")
+    trajectory_output_topic = LaunchConfiguration("trajectory_output_topic")
+    controller_manager_name = PathJoinSubstitution(["/", namespace, "controller_manager"])
+    joint_states_topic = PathJoinSubstitution(["/", namespace, "joint_states"])
+    dynamic_joint_states_topic = PathJoinSubstitution(
+        ["/", namespace, "dynamic_joint_states"]
+    )
 
     robot_description = ParameterValue(
         Command(
@@ -34,36 +41,46 @@ def generate_launch_description():
     control_node = Node(
         package="controller_manager",
         executable="ros2_control_node",
+        namespace=namespace,
         parameters=[{"robot_description": robot_description}, controllers_file],
+        remappings=[
+            ("/joint_states", joint_states_topic),
+            ("/dynamic_joint_states", dynamic_joint_states_topic),
+        ],
         output="screen",
     )
     state_publisher = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
+        namespace=namespace,
         parameters=[{"robot_description": robot_description}],
         output="screen",
     )
     joint_state_spawner = Node(
         package="controller_manager",
         executable="spawner",
-        arguments=["joint_state_broadcaster", "--controller-manager", "/controller_manager"],
+        namespace=namespace,
+        arguments=["joint_state_broadcaster", "--controller-manager", controller_manager_name],
         output="screen",
     )
     trajectory_spawner = Node(
         package="controller_manager",
         executable="spawner",
-        arguments=["arm_trajectory_controller", "--controller-manager", "/controller_manager"],
+        namespace=namespace,
+        arguments=["arm_trajectory_controller", "--controller-manager", controller_manager_name],
         output="screen",
     )
     degree_bridge = Node(
         package="robot_arm_controller",
         executable="degree_trajectory_bridge",
+        namespace=namespace,
         parameters=[
             {
                 "include_gripper": ParameterValue(
                     use_gripper,
                     value_type=bool,
-                )
+                ),
+                "output_topic": trajectory_output_topic,
             }
         ],
         output="screen",
@@ -73,6 +90,11 @@ def generate_launch_description():
         [
             DeclareLaunchArgument("device_name", default_value="/dev/ttyUSB0"),
             DeclareLaunchArgument("use_gripper", default_value="true"),
+            DeclareLaunchArgument("namespace", default_value=""),
+            DeclareLaunchArgument(
+                "trajectory_output_topic",
+                default_value="arm_trajectory_controller/joint_trajectory",
+            ),
             DeclareLaunchArgument(
                 "controllers_file",
                 default_value=str(share / "config" / "controllers.yaml"),
