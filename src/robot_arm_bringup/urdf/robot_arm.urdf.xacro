@@ -5,30 +5,77 @@
   <xacro:arg name="link2_length" default="0.20"/>
   <xacro:arg name="link3_length" default="0.15"/>
   <xacro:arg name="use_gripper" default="true"/>
+  <xacro:arg name="degrees_per_tick" default="0.087890625"/>
+  <xacro:arg name="joint1_motor_id" default="1"/>
+  <xacro:arg name="joint1_expected_model" default="1001"/>
+  <xacro:arg name="joint1_expected_operating_mode" default="3"/>
+  <xacro:arg name="joint1_expected_drive_mode" default="0"/>
+  <xacro:arg name="joint1_zero_ticks" default="2040"/>
+  <xacro:arg name="joint1_direction" default="1.0"/>
+  <xacro:arg name="joint1_min_absolute_deg" default="80.84"/>
+  <xacro:arg name="joint1_max_absolute_deg" default="277.84"/>
+  <xacro:arg name="joint2_motor_id" default="2"/>
+  <xacro:arg name="joint2_expected_model" default="1001"/>
+  <xacro:arg name="joint2_expected_operating_mode" default="3"/>
+  <xacro:arg name="joint2_expected_drive_mode" default="0"/>
+  <xacro:arg name="joint2_zero_ticks" default="2553"/>
+  <xacro:arg name="joint2_direction" default="1.0"/>
+  <xacro:arg name="joint2_min_absolute_deg" default="111.25"/>
+  <xacro:arg name="joint2_max_absolute_deg" default="337.52"/>
+  <xacro:arg name="joint3_motor_id" default="3"/>
+  <xacro:arg name="joint3_expected_model" default="1020"/>
+  <xacro:arg name="joint3_expected_operating_mode" default="3"/>
+  <xacro:arg name="joint3_expected_drive_mode" default="0"/>
+  <xacro:arg name="joint3_zero_ticks" default="2375"/>
+  <xacro:arg name="joint3_direction" default="1.0"/>
+  <xacro:arg name="joint3_min_absolute_deg" default="105.45"/>
+  <xacro:arg name="joint3_max_absolute_deg" default="311.95"/>
+  <xacro:arg name="gripper_joint_motor_id" default="4"/>
+  <xacro:arg name="gripper_joint_expected_model" default="1020"/>
+  <xacro:arg name="gripper_joint_expected_operating_mode" default="3"/>
+  <xacro:arg name="gripper_joint_expected_drive_mode" default="4"/>
+  <xacro:arg name="gripper_joint_zero_ticks" default="2305"/>
+  <xacro:arg name="gripper_joint_direction" default="1.0"/>
+  <xacro:arg name="gripper_joint_min_absolute_deg" default="197.587890625"/>
+  <xacro:arg name="gripper_joint_max_absolute_deg" default="207.587890625"/>
   <xacro:property name="link1_length" value="$(arg link1_length)"/>
   <xacro:property name="link2_length" value="$(arg link2_length)"/>
   <xacro:property name="link3_length" value="$(arg link3_length)"/>
-  <!-- Human-editable absolute motor angles in degrees. -->
-  <!-- Nearest encoder ticks to the measured joint centers. -->
-  <xacro:property name="joint1_zero_deg" value="179.296875"/> <!-- tick 2040 -->
-  <xacro:property name="joint2_zero_deg" value="224.384765625"/> <!-- tick 2553 -->
-  <xacro:property name="joint3_zero_deg" value="208.740234375"/> <!-- tick 2375 -->
-  <xacro:property name="joint1_min_deg" value="80.84"/>
-  <xacro:property name="joint1_max_deg" value="277.84"/>
-  <xacro:property name="joint2_min_deg" value="111.25"/>
-  <xacro:property name="joint2_max_deg" value="337.52"/>
-  <xacro:property name="joint3_min_deg" value="105.45"/>
-  <xacro:property name="joint3_max_deg" value="311.95"/>
-
-  <xacro:property name="joint1_min_rad" value="${radians(joint1_min_deg - joint1_zero_deg)}"/>
-  <xacro:property name="joint1_max_rad" value="${radians(joint1_max_deg - joint1_zero_deg)}"/>
-  <xacro:property name="joint2_min_rad" value="${radians(joint2_min_deg - joint2_zero_deg)}"/>
-  <xacro:property name="joint2_max_rad" value="${radians(joint2_max_deg - joint2_zero_deg)}"/>
-  <xacro:property name="joint3_min_rad" value="${radians(joint3_min_deg - joint3_zero_deg)}"/>
-  <xacro:property name="joint3_max_rad" value="${radians(joint3_max_deg - joint3_zero_deg)}"/>
-  <!-- ID 4 temporary center is the measured startup position, tick 2305. -->
-  <xacro:property name="gripper_min_rad" value="${radians(-5.0)}"/>
-  <xacro:property name="gripper_max_rad" value="${radians(5.0)}"/>
+  <!-- Launch supplies these values from config/robot_arm_calibration.yaml. -->
+  <xacro:property name="degrees_per_tick" value="$(arg degrees_per_tick)"/>
+  <xacro:property name="radians_per_tick" value="${radians(float(degrees_per_tick))}"/>
+  <xacro:property name="joint1_zero_deg"
+    value="${int('$(arg joint1_zero_ticks)') * float(degrees_per_tick)}"/>
+  <xacro:property name="joint2_zero_deg"
+    value="${int('$(arg joint2_zero_ticks)') * float(degrees_per_tick)}"/>
+  <xacro:property name="joint3_zero_deg"
+    value="${int('$(arg joint3_zero_ticks)') * float(degrees_per_tick)}"/>
+  <xacro:property name="gripper_zero_deg"
+    value="${int('$(arg gripper_joint_zero_ticks)') * float(degrees_per_tick)}"/>
+  <xacro:property name="joint1_a"
+    value="${float('$(arg joint1_direction)') * (float('$(arg joint1_min_absolute_deg)') - joint1_zero_deg)}"/>
+  <xacro:property name="joint1_b"
+    value="${float('$(arg joint1_direction)') * (float('$(arg joint1_max_absolute_deg)') - joint1_zero_deg)}"/>
+  <xacro:property name="joint2_a"
+    value="${float('$(arg joint2_direction)') * (float('$(arg joint2_min_absolute_deg)') - joint2_zero_deg)}"/>
+  <xacro:property name="joint2_b"
+    value="${float('$(arg joint2_direction)') * (float('$(arg joint2_max_absolute_deg)') - joint2_zero_deg)}"/>
+  <xacro:property name="joint3_a"
+    value="${float('$(arg joint3_direction)') * (float('$(arg joint3_min_absolute_deg)') - joint3_zero_deg)}"/>
+  <xacro:property name="joint3_b"
+    value="${float('$(arg joint3_direction)') * (float('$(arg joint3_max_absolute_deg)') - joint3_zero_deg)}"/>
+  <xacro:property name="gripper_a"
+    value="${float('$(arg gripper_joint_direction)') * (float('$(arg gripper_joint_min_absolute_deg)') - gripper_zero_deg)}"/>
+  <xacro:property name="gripper_b"
+    value="${float('$(arg gripper_joint_direction)') * (float('$(arg gripper_joint_max_absolute_deg)') - gripper_zero_deg)}"/>
+  <xacro:property name="joint1_min_rad" value="${radians(min(joint1_a, joint1_b))}"/>
+  <xacro:property name="joint1_max_rad" value="${radians(max(joint1_a, joint1_b))}"/>
+  <xacro:property name="joint2_min_rad" value="${radians(min(joint2_a, joint2_b))}"/>
+  <xacro:property name="joint2_max_rad" value="${radians(max(joint2_a, joint2_b))}"/>
+  <xacro:property name="joint3_min_rad" value="${radians(min(joint3_a, joint3_b))}"/>
+  <xacro:property name="joint3_max_rad" value="${radians(max(joint3_a, joint3_b))}"/>
+  <xacro:property name="gripper_min_rad" value="${radians(min(gripper_a, gripper_b))}"/>
+  <xacro:property name="gripper_max_rad" value="${radians(max(gripper_a, gripper_b))}"/>
 
   <!-- Placeholder geometry: replace lengths and meshes with the actual mechanism. -->
   <link name="base_link">
@@ -126,68 +173,101 @@
       <param name="goal_position_address">116</param>
       <param name="present_velocity_address">128</param>
       <param name="present_position_address">132</param>
+      <param name="present_current_address">126</param>
+      <param name="present_input_voltage_address">144</param>
+      <param name="present_temperature_address">146</param>
+      <param name="hardware_error_status_address">70</param>
+      <param name="bus_watchdog_address">98</param>
+      <param name="bus_watchdog_raw">25</param>
+      <param name="diagnostic_read_interval">50</param>
+      <param name="max_consecutive_read_failures">3</param>
       <param name="velocity_rad_s_per_raw_unit">0.023980824</param>
+      <param name="current_amp_per_raw_unit">0.00269</param>
     </hardware>
 
     <joint name="joint1">
-      <param name="motor_id">1</param>
-      <param name="expected_model">1001</param>
-      <param name="expected_operating_mode">3</param>
-      <param name="expected_drive_mode">0</param>
-      <param name="zero_ticks">2040</param>
-      <param name="direction">1.0</param>
-      <param name="radians_per_tick">0.001533981</param>
+      <param name="motor_id">$(arg joint1_motor_id)</param>
+      <param name="expected_model">$(arg joint1_expected_model)</param>
+      <param name="expected_operating_mode">$(arg joint1_expected_operating_mode)</param>
+      <param name="expected_drive_mode">$(arg joint1_expected_drive_mode)</param>
+      <param name="zero_ticks">$(arg joint1_zero_ticks)</param>
+      <param name="direction">$(arg joint1_direction)</param>
+      <param name="radians_per_tick">${radians_per_tick}</param>
       <command_interface name="position">
         <param name="min">${joint1_min_rad}</param><param name="max">${joint1_max_rad}</param>
       </command_interface>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
+      <state_interface name="current"/>
+      <state_interface name="voltage"/>
+      <state_interface name="temperature"/>
+      <state_interface name="hardware_error"/>
+      <state_interface name="bus_watchdog"/>
+      <state_interface name="communication_ok"/>
     </joint>
 
     <joint name="joint2">
-      <param name="motor_id">2</param>
-      <param name="expected_model">1001</param>
-      <param name="expected_operating_mode">3</param>
-      <param name="expected_drive_mode">0</param>
-      <param name="zero_ticks">2553</param>
-      <param name="direction">1.0</param>
-      <param name="radians_per_tick">0.001533981</param>
+      <param name="motor_id">$(arg joint2_motor_id)</param>
+      <param name="expected_model">$(arg joint2_expected_model)</param>
+      <param name="expected_operating_mode">$(arg joint2_expected_operating_mode)</param>
+      <param name="expected_drive_mode">$(arg joint2_expected_drive_mode)</param>
+      <param name="zero_ticks">$(arg joint2_zero_ticks)</param>
+      <param name="direction">$(arg joint2_direction)</param>
+      <param name="radians_per_tick">${radians_per_tick}</param>
       <command_interface name="position">
         <param name="min">${joint2_min_rad}</param><param name="max">${joint2_max_rad}</param>
       </command_interface>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
+      <state_interface name="current"/>
+      <state_interface name="voltage"/>
+      <state_interface name="temperature"/>
+      <state_interface name="hardware_error"/>
+      <state_interface name="bus_watchdog"/>
+      <state_interface name="communication_ok"/>
     </joint>
 
     <joint name="joint3">
-      <param name="motor_id">3</param>
-      <param name="expected_model">1020</param>
-      <param name="expected_operating_mode">3</param>
-      <param name="expected_drive_mode">0</param>
-      <param name="zero_ticks">2375</param>
-      <param name="direction">1.0</param>
-      <param name="radians_per_tick">0.001533981</param>
+      <param name="motor_id">$(arg joint3_motor_id)</param>
+      <param name="expected_model">$(arg joint3_expected_model)</param>
+      <param name="expected_operating_mode">$(arg joint3_expected_operating_mode)</param>
+      <param name="expected_drive_mode">$(arg joint3_expected_drive_mode)</param>
+      <param name="zero_ticks">$(arg joint3_zero_ticks)</param>
+      <param name="direction">$(arg joint3_direction)</param>
+      <param name="radians_per_tick">${radians_per_tick}</param>
       <command_interface name="position">
         <param name="min">${joint3_min_rad}</param><param name="max">${joint3_max_rad}</param>
       </command_interface>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
+      <state_interface name="current"/>
+      <state_interface name="voltage"/>
+      <state_interface name="temperature"/>
+      <state_interface name="hardware_error"/>
+      <state_interface name="bus_watchdog"/>
+      <state_interface name="communication_ok"/>
     </joint>
 
     <xacro:if value="$(arg use_gripper)">
       <joint name="gripper_joint">
-        <param name="motor_id">4</param>
-        <param name="expected_model">1020</param>
-        <param name="expected_operating_mode">3</param>
-        <param name="expected_drive_mode">4</param>
-        <param name="zero_ticks">2305</param>
-        <param name="direction">1.0</param>
-        <param name="radians_per_tick">0.001533981</param>
+        <param name="motor_id">$(arg gripper_joint_motor_id)</param>
+        <param name="expected_model">$(arg gripper_joint_expected_model)</param>
+        <param name="expected_operating_mode">$(arg gripper_joint_expected_operating_mode)</param>
+        <param name="expected_drive_mode">$(arg gripper_joint_expected_drive_mode)</param>
+        <param name="zero_ticks">$(arg gripper_joint_zero_ticks)</param>
+        <param name="direction">$(arg gripper_joint_direction)</param>
+        <param name="radians_per_tick">${radians_per_tick}</param>
         <command_interface name="position">
           <param name="min">${gripper_min_rad}</param><param name="max">${gripper_max_rad}</param>
         </command_interface>
         <state_interface name="position"/>
         <state_interface name="velocity"/>
+        <state_interface name="current"/>
+        <state_interface name="voltage"/>
+        <state_interface name="temperature"/>
+        <state_interface name="hardware_error"/>
+        <state_interface name="bus_watchdog"/>
+        <state_interface name="communication_ok"/>
       </joint>
     </xacro:if>
   </ros2_control>

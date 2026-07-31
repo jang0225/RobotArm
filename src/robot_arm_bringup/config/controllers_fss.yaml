@@ -1,6 +1,8 @@
 /robot_arm/controller_manager:
   ros__parameters:
     update_rate: 50
+    hardware_components_initial_state:
+      inactive: [DynamixelRobotArm]
 
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster

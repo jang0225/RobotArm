@@ -119,7 +119,9 @@ ros2 run robot_arm_controller fish_motion_node --ros-args \
 ros2 launch robot_arm_bringup ros2_control.launch.py device_name:=/dev/ttyUSB1
 ```
 
-그리퍼 조립 후 절대 최소·최대 각도와 중앙 tick을 다시 측정하여 [`robot_arm.urdf.xacro`](src/robot_arm_bringup/urdf/robot_arm.urdf.xacro)의 임시 값을 교체하세요.
+그리퍼 조립 후 절대 최소·최대 각도와 중앙 tick을 다시 측정하여
+[`robot_arm_calibration.yaml`](src/robot_arm_bringup/config/robot_arm_calibration.yaml)을
+수정하세요. 이 파일 하나가 Xacro, degree bridge, FSS 궤적 검증에 모두 적용됩니다.
 
 표준 radian 궤적은 `/arm_trajectory_controller/joint_trajectory`에 직접 보낼 수도 있습니다.
 
@@ -143,6 +145,12 @@ ros2 launch robot_arm_bringup fss_robot_arm.launch.py \
 
 기본값은 이미 실행 중인 FSS에 RobotArm만 연결합니다. FSS 전체 시스템도 같은 launch에서 시작하려면 사전 점검 후 `start_fss:=true`를 명시하세요.
 
+FSS 통합 launch에서는 로봇팔 hardware와 controller가 비활성 상태로 시작합니다.
+정상 health의 `ACTIVE` mode가 확인된 뒤에만 torque와 controller가 활성화됩니다.
+`SAFE_HOLD`와 일반 mode 이탈은 현재 위치를 유지하고,
+`EMERGENCY_STOP` 또는 mode timeout은 controller를 정지한 뒤 hardware를
+`inactive`로 전환하여 Dynamixel torque를 해제합니다.
+
 통합 모드의 degree 명령:
 
 ```bash
@@ -153,10 +161,30 @@ ros2 topic pub --once /robot_arm/joint_commands_deg \
 
 상세한 빌드 순서, 토픽 계약, FSS 모드별 동작 및 제한사항은 [`FSS_INTEGRATION.md`](FSS_INTEGRATION.md)에 정리되어 있습니다.
 
+## 진단과 통신 watchdog
+
+각 Dynamixel에는 500 ms Bus Watchdog이 활성화됩니다. 제어 프로세스나 USB 통신이
+중단되어 instruction packet이 더 이상 도착하지 않으면 모터 자체가 정지합니다.
+일시적인 read 누락은 이전 상태를 유지해 최대 3회까지 허용하지만, 연속 통신 실패나
+Hardware Error Status는 전체 로봇팔 안전 오류로 처리합니다. 이는 관절 한계 포화와
+별개이므로 한 관절의 각도 제한 도달은 여전히 다른 관절에 영향을 주지 않습니다.
+
+온도, 전압, 전류, 통신 상태와 Hardware Error는 `/diagnostics`로 확인합니다.
+
+```bash
+ros2 topic echo /diagnostics
+ros2 topic echo /dynamic_joint_states
+```
+
+표준 radian 궤적은 관절 이름, 배열 크기, 유한값, 시간 순서, 최대 속도와 각도 제한을
+검증합니다. 범위를 벗어난 유한한 위치는 해당 관절만 포화되며 다른 관절 목표는
+그대로 유지됩니다.
+
 ## 안전 주의사항
 
 - 모터에는 별도 전원과 U2D2 같은 통신 장치가 필요합니다.
 - 전원을 넣기 전에 로봇을 고정하고 비상정지 수단을 준비하세요.
 - Wizard에서 EEPROM을 변경할 때는 먼저 Torque Enable을 0으로 만드세요.
 - 실제 링크 길이, 관성, 충돌 형상과 그리퍼 제한은 하드웨어 완성 후 반드시 보정하세요.
-- 실사용 전 통신 watchdog, 전류·온도 감시, 충돌 방지를 추가하세요.
+- 소프트웨어 Bus Watchdog과 torque 해제는 물리 비상정지 회로를 대체하지 않습니다.
+- 실제 링크 치수와 collision geometry가 완성되기 전에는 자동 경로 계획을 사용하지 마세요.

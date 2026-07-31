@@ -2,7 +2,7 @@
 
 > 대상 FSS 저장소: `SNU-SMRL/FSS_FSW`
 >
-> 최종 갱신: 2026-07-29
+> 최종 갱신: 2026-07-31
 
 ## 1. 연동 원칙
 
@@ -40,7 +40,10 @@ src/robot_arm_controller/src/fss_arm_supervisor_node.cpp
 - FSS `/system/health` 구독
 - 외부 로봇팔 궤적 요청을 내부 controller 토픽으로 전달
 - FSS 모드 또는 health가 안전 조건을 벗어나면 새 명령 차단
-- 허용 상태에서 차단 상태로 바뀌면 최신 `/robot_arm/joint_states` 위치로 hold 궤적 발행
+- 일반 mode 이탈 또는 health 오류에서는 최신 관절 위치 hold
+- `EMERGENCY_STOP`과 mode timeout에서는 controller를 중지하고 hardware inactive 전환
+- 정상 `ACTIVE` 복귀 시 hardware와 controller를 순서대로 활성화
+- 표준 궤적의 형식, 관절 제한, 시간과 최대 속도 검증
 - mode와 health 메시지 timeout 감시
 - 현재 게이트 상태를 `/robot_arm/fss_supervisor_status`로 발행
 
@@ -83,16 +86,20 @@ controller manager와 모든 로봇팔 토픽을 `/robot_arm` namespace에 둔�
 5. `actuators_ok == true`
 6. `errors` 배열이 비어 있음
 
+FSS 통합 구성은 hardware와 controller를 inactive로 시작하며, 정상 `ACTIVE`가
+확인되기 전에는 torque를 켜지 않는다.
+
 | FSS 상태 | 로봇팔 명령 | 전환 시 동작 |
 |---|---|---|
-| `ACTIVE` + 정상 health | 허용 | 요청 궤적 전달 |
-| `IDLE` | 차단 | 현재 위치 hold |
-| `PRESSURIZING` | 차단 | 현재 위치 hold |
-| `READY` | 차단 | 현재 위치 hold |
+| `ACTIVE` + 정상 health | 허용 | hardware/controller 활성화 후 검증된 궤적 전달 |
+| `IDLE`, `PRESSURIZING`, `READY` | 차단 | 이미 활성 상태면 현재 위치 hold |
 | `SAFE_HOLD` | 차단 | 현재 위치 hold |
-| `EMERGENCY_STOP` | 차단 | 현재 위치 hold |
-| mode 또는 health timeout | 차단 | 현재 위치 hold |
-| `ACTIVE` + 비정상 health | 차단 | 현재 위치 hold |
+| `EMERGENCY_STOP` | 차단 | controller 중지, hardware inactive, torque 해제 |
+| mode timeout | 차단 | controller 중지, hardware inactive, torque 해제 |
+| health timeout 또는 비정상 health | 차단 | 현재 위치 hold |
+
+E-stop은 latch된다. 이후 mode가 바뀌어도 torque가 자동으로 켜지지 않으며,
+정상 health의 `ACTIVE`가 다시 확인되어야 활성화된다.
 
 `require_healthy:=false`는 벤치 디버깅용이다. 실제 FSS 운용에서는 기본값 `true`를 유지한다.
 
@@ -113,6 +120,7 @@ controller manager와 모든 로봇팔 토픽을 `/robot_arm` namespace에 둔�
 | `/robot_arm/requested_joint_trajectory` | `trajectory_msgs/msg/JointTrajectory` | 표준 radian 궤적 요청 |
 | `/robot_arm/joint_states` | `sensor_msgs/msg/JointState` | 관절 측정 상태 |
 | `/robot_arm/fss_supervisor_status` | `std_msgs/msg/String` | 명령 허용·차단 상태 |
+| `/diagnostics` | `diagnostic_msgs/msg/DiagnosticArray` | 모터 통신·전류·전압·온도·오류 |
 
 ### 내부 전용 토픽
 
@@ -249,7 +257,7 @@ ros2 topic echo /system/health
 FSS가 아직 `ACTIVE`가 아니면 supervisor 상태는 다음과 비슷하다.
 
 ```text
-data: "BLOCKED: FSS mode is not ACTIVE"
+data: "TORQUE_OFF: FSS mode is not ACTIVE"
 ```
 
 정상 허용 상태:
@@ -305,11 +313,21 @@ ros2 topic pub --once /robot_arm/requested_joint_trajectory \
   "{joint_names: [joint1, joint2, joint3], points: [{positions: [0.1, 0.2, -0.1], time_from_start: {sec: 5}}]}"
 ```
 
-반복 모터 시험용 `fish_motion_node`도 사용할 수 있지만 핵심 운용 기능은 아니다. 통합 시험에서 사용할 경우 출력 토픽을 `/robot_arm/requested_joint_trajectory`로 지정하여 supervisor를 우회하지 않게 한다.
+Supervisor는 다음 항목을 controller 전달 전에 검사한다.
+
+- 미등록 또는 중복 관절
+- point 배열 크기와 NaN/Inf
+- 증가하지 않는 `time_from_start`
+- 설정된 최대 point 수와 전체 duration
+- 보정 파일의 최대 속도
+- 보정 파일의 관절 위치 제한
+
+유한한 위치 제한 초과는 메시지 전체를 버리지 않고 해당 관절만 포화한다.
+따라서 한 관절이 상한에 도달해도 다른 관절 목표는 계속 전달된다.
 
 ## 11. 검증 결과
 
-2026-07-29 실제 모터를 연결하지 않은 ROS 2 토픽 테스트로 다음을 확인했다.
+2026-07-31 소프트웨어 검증으로 다음을 확인했다.
 
 - `fss_interfaces` underlay 상태에서 supervisor C++ 빌드 성공
 - RobotArm 세 패키지 전체 빌드 성공
@@ -317,22 +335,28 @@ ros2 topic pub --once /robot_arm/requested_joint_trajectory \
 - `ACTIVE` + 정상 health에서 요청 궤적이 controller 토픽으로 전달됨
 - joint position `[0.1, 0.2, 0.3] rad` 수신 후 차단 상태 전환 시 동일 위치의 hold 궤적 발행
 - mode 미수신 또는 timeout 상태에서 새 요청 궤적 차단
+- FSS lifecycle API를 사용하는 supervisor 포함 전체 C++ 빌드
+- calibration에서 생성한 Xacro/URDF 파싱
+- 제한 초과 관절만 포화되고 다른 관절 명령은 보존되는 회귀 테스트
+- calibration 및 trajectory validator 전체 테스트 통과
+
+```text
+Summary: 10 tests, 0 errors, 0 failures, 0 skipped
+```
 
 실제 FSS와 Dynamixel을 동시에 연결한 하드웨어 통합 시험은 별도로 수행해야 한다.
 
 ## 12. 현재 제한사항
 
-### Hold와 torque-off의 차이
+### Software torque-off와 물리 비상정지
 
-현재 supervisor의 정지는 최신 측정 위치를 목표로 보내는 position hold다. Dynamixel torque 자체를 끄지는 않는다.
+Supervisor는 `EMERGENCY_STOP`과 mode timeout에서 controller-manager lifecycle을
+통해 hardware를 inactive로 전환하고 Dynamixel torque를 해제한다. 또한 모터에는
+500 ms Bus Watchdog을 설정한다.
 
-진짜 비상정지에서 torque까지 차단하려면 다음 중 하나가 추가로 필요하다.
-
-- controller manager lifecycle을 이용한 hardware 비활성화
-- RobotArm 전용 torque-off service
-- 전원 차단이 가능한 물리적 비상정지 회로
-
-물리적 비상정지 회로가 소프트웨어보다 우선해야 한다.
+이는 소프트웨어와 통신이 살아 있는 범위의 보호 기능이다. 전원 차단이 필요한
+진짜 비상정지는 별도 물리 회로가 우선해야 한다. Torque가 풀렸을 때 링크가
+중력으로 낙하할 수 있는 구조라면 기계식 브레이크나 지지 구조도 함께 검증해야 한다.
 
 ### FSS manager health 집계
 
@@ -357,10 +381,10 @@ RobotArm 오류를 FSS manager의 공식 health와 `SAFE_HOLD` 전이에 포함�
 
 ## 13. 향후 작업
 
-- `EMERGENCY_STOP`에서 controller와 Dynamixel torque를 확실히 비활성화
-- RobotArm hardware error, 온도, 전류를 표준 diagnostic으로 발행
 - RobotArm 상태를 FSS manager health에 포함하는 interface 협의
 - 실제 임무용 로봇팔 command/action 계약 정의
 - stable U2D2 udev rule 배포
 - Jetson에서 FSS 제어 주기와 RobotArm 50Hz loop의 CPU 부하 측정
 - rosbag 기반 FSS mode 전환 및 arm hold 회귀 테스트
+- SROS2/DDS policy로 내부 controller topic publish 권한 제한
+- 실제 하드웨어에서 E-stop, Bus Watchdog, 고온·저전압·통신 단절 시험

@@ -272,8 +272,33 @@ joint3 → -20° 그대로 실행
 - arm-only 모드로 그리퍼 torque 제외 가능
 - FSS 통합 시 운용 모드와 health를 통과한 궤적만 controller에 전달
 - FSS 통신 timeout과 안전 모드 전환 시 현재 관절 위치 hold
+- FSS 통합 시작 시 hardware/controller를 inactive로 유지하고 정상 `ACTIVE`에서만 활성화
+- `EMERGENCY_STOP`과 mode timeout에서 controller 정지 후 hardware inactive 및 torque 해제
+- 500 ms Dynamixel Bus Watchdog 적용
+- 연속 통신 실패와 Hardware Error Status를 관절 한계 도달과 분리하여 전역 안전 오류로 처리
+- 전류, 전압, 온도, 통신 상태를 `/diagnostics`로 발행
+- 표준 `JointTrajectory`의 이름, 배열, 유한값, 시간, 속도, 위치 제한 검증
 
-`trajectory` path tolerance는 관절 간 결함 격리를 위해 비활성화했다. 따라서 실제 운용 단계에서는 `/joint_states` 기반의 관절별 watchdog, 전류·온도 감시 및 비상정지 로직을 별도로 추가해야 한다.
+`trajectory` path tolerance는 관절 간 결함 격리를 위해 계속 비활성화한다.
+한 관절의 상·하한 포화는 해당 관절에만 적용하고 다른 관절은 계속 움직인다.
+반면 지속 통신 단절, Bus Watchdog 발동, Hardware Error Status는 위치 제한 문제가
+아니므로 전체 로봇팔 안전 오류로 처리한다.
+
+### 7.1 2026-07-31 안전·검증 구조 개선
+
+- 중앙 tick, 절대 최소·최대각, ID, 모델, 방향, 최대 속도를
+  `config/robot_arm_calibration.yaml` 하나로 통합
+- launch가 동일한 값을 Xacro, degree bridge, FSS supervisor에 전달
+- supervisor 입력에 공통 trajectory validator 적용
+- 범위 초과 위치는 관절별로 포화하고, 다른 관절과 나머지 point는 보존
+- 중복/미등록 관절, NaN/Inf, 잘못된 배열, 역행 시간, 과속 궤적은 controller 진입 전 거부
+- FSS watchdog 시간 계산을 ROS time이 아닌 monotonic steady clock으로 변경
+- FSS `EMERGENCY_STOP`을 ACTIVE 복귀 전까지 latch
+- Dynamixel 진단 state interface와 `DiagnosticArray` 발행 노드 추가
+- 순간 packet 누락은 3회까지 이전 상태로 유지하고 지속 실패만 전역 정지
+
+관절별 포화 동작은 회귀 테스트로 고정했다. 테스트는 `joint1`이 상한을 초과해도
+`joint2` 목표가 수정되거나 제거되지 않는지 직접 확인한다.
 
 ## 8. 검증 기록
 
@@ -296,6 +321,14 @@ Summary: 3 packages finished
 추가로 `git diff --check`를 실행해 whitespace 오류가 없음을 확인했다.
 
 2026-07-29 FSS interface underlay를 source한 상태에서 supervisor를 포함해 다시 빌드했으며, 가짜 FSS mode/health와 joint state를 이용한 ROS 2 토픽 시험으로 허용·차단·hold 동작을 검증했다.
+
+2026-07-31 FSS underlay에서 세 패키지와 lifecycle 기반 supervisor를 빌드하고
+Xacro/URDF 파싱을 확인했다. calibration 테스트 3개와 trajectory validator 테스트
+5개를 포함한 전체 `colcon test-result`는 다음과 같았다.
+
+```text
+Summary: 10 tests, 0 errors, 0 failures, 0 skipped
+```
 
 ### 하드웨어 검증 절차
 
@@ -351,6 +384,10 @@ ROS 2 `ros2_control`과 Dynamixel SDK를 이용해 3축 관절 및 그리퍼를 
 - 모터별 모델 및 제어 모드 시작 검증
 - 관절별 command saturation을 통한 결함 격리
 - FSS mode/health 기반 로봇팔 명령 게이트와 timeout hold 구현
+- FSS lifecycle 기반 torque gating 및 E-stop 연동
+- Dynamixel Bus Watchdog과 표준 diagnostics 구현
+- 단일 calibration YAML과 엄격한 trajectory 검증 계층 구현
+- 관절별 포화 정책을 보호하는 자동 회귀 테스트 작성
 - FSS 소스 수정 없이 동작하는 ROS 2 underlay/overlay 통합 구조 설계
 
 ### 대표 문제 해결 사례
@@ -373,15 +410,13 @@ ROS 2 `ros2_control`과 Dynamixel SDK를 이용해 3축 관절 및 그리퍼를 
 
 - ID 4 그리퍼 조립 후 실제 중앙 tick과 가동 범위 재측정
 - 실제 링크 질량, 관성 및 collision geometry 반영
-- Dynamixel Hardware Error Status, 전류, 전압, 온도 모니터링
-- 모터별 통신 및 추종 watchdog 추가
-- 비상정지와 torque-off service 구현
-- 다회전 및 방향 반전 관절을 위한 calibration 파일 분리
-- 동일한 제한값이 Xacro와 controller 코드에 중복되지 않도록 단일 YAML 설정으로 통합
+- 실제 하드웨어에서 Bus Watchdog 발동·복구와 Hardware Error 진단 시험
+- 다회전 관절이 추가될 경우 calibration schema 확장
 - MoveIt 2 연동과 충돌 없는 경로 계획
-- FSS `EMERGENCY_STOP`에서 controller와 Dynamixel torque 비활성화
 - RobotArm health를 FSS manager의 전체 health에 포함하기 위한 interface 협의
 - 실제 하드웨어 반복 시험 결과와 오차 그래프 추가
+- SROS2/DDS access control로 내부 controller topic 우회 차단
+- 물리 비상정지 회로와 torque-off 시 중력 낙하 위험 검증
 
 ## 12. 기록 갱신 양식
 

@@ -22,31 +22,35 @@ public:
   DegreeTrajectoryBridge()
   : Node("degree_trajectory_bridge")
   {
-    const bool include_gripper = declare_parameter<bool>("include_gripper", true);
-    std::vector<std::string> default_joint_names{"joint1", "joint2", "joint3"};
-    std::vector<double> default_min_positions{-98.456875, -113.134766, -103.290234};
-    std::vector<double> default_max_positions{98.543125, 113.135234, 103.209766};
-    if (include_gripper) {
-      default_joint_names.push_back("gripper_joint");
-      default_min_positions.push_back(-5.0);
-      default_max_positions.push_back(5.0);
-    }
     joint_names_ = declare_parameter<std::vector<std::string>>(
-      "joint_names", default_joint_names);
+      "joint_names", std::vector<std::string>{});
     min_positions_deg_ = declare_parameter<std::vector<double>>(
-      "min_position_deg", default_min_positions);
+      "min_position_deg", std::vector<double>{});
     max_positions_deg_ = declare_parameter<std::vector<double>>(
-      "max_position_deg", default_max_positions);
+      "max_position_deg", std::vector<double>{});
+    max_duration_sec_ = declare_parameter<double>("max_duration_sec", 120.0);
     const auto output_topic = declare_parameter<std::string>(
       "output_topic", "/arm_trajectory_controller/joint_trajectory");
 
     if (joint_names_.empty() || min_positions_deg_.size() != joint_names_.size() ||
       max_positions_deg_.size() != joint_names_.size())
     {
-      throw std::invalid_argument("degree bridge parameter array lengths must match");
+      throw std::invalid_argument(
+              "degree bridge requires matching joint_names/min_position_deg/max_position_deg; "
+              "start it through robot_arm_bringup");
+    }
+    if (!std::isfinite(max_duration_sec_) || max_duration_sec_ <= 0.0) {
+      throw std::invalid_argument("max_duration_sec must be positive and finite");
     }
     for (std::size_t i = 0; i < joint_names_.size(); ++i) {
-      joint_index_.emplace(joint_names_[i], i);
+      if (joint_names_[i].empty() ||
+        !std::isfinite(min_positions_deg_[i]) ||
+        !std::isfinite(max_positions_deg_[i]) ||
+        min_positions_deg_[i] > max_positions_deg_[i] ||
+        !joint_index_.emplace(joint_names_[i], i).second)
+      {
+        throw std::invalid_argument("invalid or duplicate degree bridge joint parameter");
+      }
     }
 
     publisher_ = create_publisher<trajectory_msgs::msg::JointTrajectory>(output_topic, 10);
@@ -65,8 +69,11 @@ private:
       RCLCPP_ERROR(get_logger(), "joint_names and positions_deg must have the same non-zero length");
       return;
     }
-    if (!std::isfinite(msg->duration_sec) || msg->duration_sec <= 0.0) {
-      RCLCPP_ERROR(get_logger(), "duration_sec must be positive");
+    if (!std::isfinite(msg->duration_sec) || msg->duration_sec <= 0.0 ||
+      msg->duration_sec > max_duration_sec_)
+    {
+      RCLCPP_ERROR(
+        get_logger(), "duration_sec must be within (0, %.3f]", max_duration_sec_);
       return;
     }
 
@@ -120,6 +127,7 @@ private:
   std::vector<std::string> joint_names_;
   std::vector<double> min_positions_deg_;
   std::vector<double> max_positions_deg_;
+  double max_duration_sec_{120.0};
   std::unordered_map<std::string, std::size_t> joint_index_;
   rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr publisher_;
   rclcpp::Subscription<robot_arm_controller::msg::JointCommandDegrees>::SharedPtr subscription_;

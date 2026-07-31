@@ -9,6 +9,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 find_package(ament_cmake REQUIRED)
+find_package(control_msgs REQUIRED)
+find_package(diagnostic_msgs REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -29,6 +31,15 @@ ament_target_dependencies(${PROJECT_NAME}
   dynamixel_sdk
 )
 
+add_executable(dynamixel_diagnostics_node src/dynamixel_diagnostics_node.cpp)
+target_compile_features(dynamixel_diagnostics_node PUBLIC cxx_std_17)
+ament_target_dependencies(
+  dynamixel_diagnostics_node
+  control_msgs
+  diagnostic_msgs
+  rclcpp
+)
+
 pluginlib_export_plugin_description_file(hardware_interface robot_arm_hardware.xml)
 
 install(TARGETS ${PROJECT_NAME}
@@ -37,10 +48,11 @@ install(TARGETS ${PROJECT_NAME}
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
+install(TARGETS dynamixel_diagnostics_node DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
 install(FILES robot_arm_hardware.xml DESTINATION share/${PROJECT_NAME})
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(
-  hardware_interface pluginlib rclcpp rclcpp_lifecycle dynamixel_sdk)
+  control_msgs diagnostic_msgs hardware_interface pluginlib rclcpp rclcpp_lifecycle dynamixel_sdk)
 ament_package()

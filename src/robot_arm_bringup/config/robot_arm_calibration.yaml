@@ -1,0 +1,53 @@
+# Single source of truth for motor identity, joint zero, and software limits.
+#
+# Absolute angles are the values shown by Dynamixel Wizard.  The limits below
+# already include the measured 2 degree mechanical safety margin.  Update this
+# file after changing a horn/link; launch files propagate it to both ros2_control
+# and the degree-command bridge.
+degrees_per_tick: 0.087890625
+
+joints:
+  joint1:
+    motor_id: 1
+    expected_model: 1001
+    expected_operating_mode: 3
+    expected_drive_mode: 0
+    zero_ticks: 2040
+    direction: 1.0
+    min_absolute_deg: 80.84
+    max_absolute_deg: 277.84
+    max_velocity_deg_s: 45.0
+
+  joint2:
+    motor_id: 2
+    expected_model: 1001
+    expected_operating_mode: 3
+    expected_drive_mode: 0
+    zero_ticks: 2553
+    direction: 1.0
+    min_absolute_deg: 111.25
+    max_absolute_deg: 337.52
+    max_velocity_deg_s: 29.0
+
+  joint3:
+    motor_id: 3
+    expected_model: 1020
+    expected_operating_mode: 3
+    expected_drive_mode: 0
+    zero_ticks: 2375
+    direction: 1.0
+    min_absolute_deg: 105.45
+    max_absolute_deg: 311.95
+    max_velocity_deg_s: 45.0
+
+  gripper_joint:
+    motor_id: 4
+    expected_model: 1020
+    expected_operating_mode: 3
+    expected_drive_mode: 4
+    zero_ticks: 2305
+    direction: 1.0
+    # Temporary narrow range until the gripper mechanism is completed.
+    min_absolute_deg: 197.587890625
+    max_absolute_deg: 207.587890625
+    max_velocity_deg_s: 20.0
