@@ -9,10 +9,12 @@ namespace robot_arm_controller
 namespace gripper_utils
 {
 
-inline double opening_cm_to_degrees(
-  double opening_cm, double max_opening_cm, double max_opening_deg)
+inline double opening_cm_to_position_degrees(
+  double opening_cm, double max_opening_cm, double closed_position_deg,
+  double open_position_deg)
 {
-  return std::clamp(opening_cm, 0.0, max_opening_cm) * max_opening_deg / max_opening_cm;
+  const double ratio = std::clamp(opening_cm, 0.0, max_opening_cm) / max_opening_cm;
+  return closed_position_deg + ratio * (open_position_deg - closed_position_deg);
 }
 
 }  // namespace gripper_utils

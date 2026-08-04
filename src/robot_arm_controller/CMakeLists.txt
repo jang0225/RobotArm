@@ -43,7 +43,7 @@ target_link_libraries(degree_trajectory_bridge "${cpp_typesupport_target}")
 add_executable(gripper_opening_bridge src/gripper_opening_bridge.cpp)
 target_compile_features(gripper_opening_bridge PUBLIC cxx_std_17)
 target_include_directories(gripper_opening_bridge PRIVATE include)
-ament_target_dependencies(gripper_opening_bridge rclcpp)
+ament_target_dependencies(gripper_opening_bridge rclcpp trajectory_msgs)
 target_link_libraries(gripper_opening_bridge "${cpp_typesupport_target}")
 
 add_executable(fish_motion_node src/fish_motion_node.cpp)

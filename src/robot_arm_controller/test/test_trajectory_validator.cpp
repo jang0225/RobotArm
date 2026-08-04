@@ -35,12 +35,15 @@ const TrajectoryValidationOptions kOptions{100, 10.0, true};
 
 TEST(GripperUtils, ConvertsCentimetersToPositiveOpeningDegrees)
 {
-  EXPECT_DOUBLE_EQ(
-    robot_arm_controller::gripper_utils::opening_cm_to_degrees(0.0, 13.0, 278.0), 0.0);
-  EXPECT_DOUBLE_EQ(
-    robot_arm_controller::gripper_utils::opening_cm_to_degrees(6.5, 13.0, 278.0), 139.0);
-  EXPECT_DOUBLE_EQ(
-    robot_arm_controller::gripper_utils::opening_cm_to_degrees(20.0, 13.0, 278.0), 278.0);
+  EXPECT_NEAR(
+    robot_arm_controller::gripper_utils::opening_cm_to_position_degrees(
+      0.0, 13.0, -45.966796875, -328.974609375), -45.966796875, 1e-9);
+  EXPECT_NEAR(
+    robot_arm_controller::gripper_utils::opening_cm_to_position_degrees(
+      6.5, 13.0, -45.966796875, -328.974609375), -187.470703125, 1e-9);
+  EXPECT_NEAR(
+    robot_arm_controller::gripper_utils::opening_cm_to_position_degrees(
+      20.0, 13.0, -45.966796875, -328.974609375), -328.974609375, 1e-9);
 }
 
 TEST(TrajectoryValidator, SaturatesOnlyTheJointOutsideItsLimit)

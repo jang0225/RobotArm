@@ -28,6 +28,10 @@ def generate_launch_description():
     )
     gripper_index = all_names.index("gripper_joint")
     gripper_max_opening_cm = calibration["joints"]["gripper_joint"]["max_opening_cm"]
+    gripper_closed_deg = all_command_origins[gripper_index]
+    gripper_open_deg = gripper_closed_deg + (
+        all_command_directions[gripper_index] * all_command_maxs[gripper_index]
+    )
     device_name = LaunchConfiguration("device_name")
     use_gripper = LaunchConfiguration("use_gripper")
     controllers_file = LaunchConfiguration("controllers_file")
@@ -157,8 +161,9 @@ def generate_launch_description():
         parameters=[
             {
                 "max_opening_cm": gripper_max_opening_cm,
-                "max_opening_deg": all_command_maxs[gripper_index],
-                "output_topic": "joint_commands_deg",
+                "closed_position_deg": gripper_closed_deg,
+                "open_position_deg": gripper_open_deg,
+                "output_topic": trajectory_output_topic,
             }
         ],
         condition=IfCondition(use_gripper),

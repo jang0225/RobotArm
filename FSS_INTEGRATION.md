@@ -310,8 +310,6 @@ ros2 topic pub --once /robot_arm/gripper_opening_cm \
 ```text
 /robot_arm/gripper_opening_cm
   → gripper_opening_bridge
-  → /robot_arm/joint_commands_deg
-  → degree_trajectory_bridge
   → /robot_arm/requested_joint_trajectory
   → fss_arm_supervisor_node
   → /robot_arm/arm_trajectory_controller/joint_trajectory
@@ -384,6 +382,7 @@ RobotArm 오류를 FSS manager의 공식 health와 `SAFE_HOLD` 전이에 포함�
 
 ```text
 /robot_arm/joint_commands_deg
+/robot_arm/gripper_opening_cm
 /robot_arm/requested_joint_trajectory
 ```
 

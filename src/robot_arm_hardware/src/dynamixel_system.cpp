@@ -352,8 +352,11 @@ hardware_interface::return_type DynamixelSystem::read(
     const int64_t signed_velocity = raw_velocity <=
       static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) ?
       static_cast<int64_t>(raw_velocity) : static_cast<int64_t>(raw_velocity) - (1LL << 32);
+    const int64_t signed_position = raw_position <=
+      static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) ?
+      static_cast<int64_t>(raw_position) : static_cast<int64_t>(raw_position) - (1LL << 32);
     position_states_[i] = joints_[i].direction *
-      (static_cast<double>(raw_position) - static_cast<double>(joints_[i].zero_ticks)) *
+      (static_cast<double>(signed_position) - static_cast<double>(joints_[i].zero_ticks)) *
       joints_[i].radians_per_tick;
     velocity_states_[i] = joints_[i].direction * static_cast<double>(signed_velocity) *
       velocity_rad_s_per_raw_unit_;
@@ -414,8 +417,12 @@ hardware_interface::return_type DynamixelSystem::write(
 
     const double raw_value = static_cast<double>(joints_[i].zero_ticks) +
       bounded_command / (joints_[i].direction * joints_[i].radians_per_tick);
-    position_ticks[i] = static_cast<uint32_t>(
-      std::llround(std::clamp(raw_value, 0.0, 4095.0)));
+    const bool extended_position = joints_[i].expected_operating_mode == 4;
+    const double raw_min = extended_position ? -1048575.0 : 0.0;
+    const double raw_max = extended_position ? 1048575.0 : 4095.0;
+    const auto signed_ticks = static_cast<int32_t>(
+      std::llround(std::clamp(raw_value, raw_min, raw_max)));
+    position_ticks[i] = static_cast<uint32_t>(signed_ticks);
   }
 
   dynamixel::GroupSyncWrite writer(port_handler_, packet_handler_, goal_position_address_, 4);
@@ -460,10 +467,33 @@ bool DynamixelSystem::ping_and_validate()
     uint16_t model = 0;
     uint8_t error = 0;
     int result = packet_handler_->ping(port_handler_, joint.id, &model, &error);
-    if (result != COMM_SUCCESS || error != 0 || model != joint.expected_model) {
+    if (result != COMM_SUCCESS) {
       RCLCPP_ERROR(
-        logger_, "ID %u ping/model check failed (expected %u, actual %u)",
+        logger_, "ID %u ping communication failed: %s",
+        joint.id, packet_handler_->getTxRxResult(result));
+      return false;
+    }
+    if (model != joint.expected_model) {
+      RCLCPP_ERROR(
+        logger_, "ID %u model mismatch (expected %u, actual %u)",
         joint.id, joint.expected_model, model);
+      return false;
+    }
+    if (error != 0) {
+      uint8_t hardware_error = 0;
+      uint8_t read_error = 0;
+      const int read_result = packet_handler_->read1ByteTxRx(
+        port_handler_, joint.id, hardware_error_status_address_, &hardware_error, &read_error);
+      if (read_result == COMM_SUCCESS) {
+        RCLCPP_ERROR(
+          logger_, "ID %u status alert=0x%02X, Hardware Error Status(70)=0x%02X; "
+          "clear the fault and reboot the motor",
+          joint.id, error, hardware_error);
+      } else {
+        RCLCPP_ERROR(
+          logger_, "ID %u status alert=0x%02X; Hardware Error Status read failed: %s",
+          joint.id, error, packet_handler_->getTxRxResult(read_result));
+      }
       return false;
     }
 

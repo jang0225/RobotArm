@@ -61,12 +61,13 @@ def load_calibration(path: Path) -> dict[str, Any]:
             raise ValueError(f"{path}: {name} direction must be -1.0 or 1.0")
         if float(joint["min_absolute_deg"]) >= float(joint["max_absolute_deg"]):
             raise ValueError(f"{path}: {name} min angle must be smaller than max angle")
-        if (
+        operating_mode = int(joint["expected_operating_mode"])
+        if operating_mode == 3 and (
             float(joint["min_absolute_deg"]) < 0.0
             or float(joint["max_absolute_deg"]) > 360.0
         ):
             raise ValueError(
-                f"{path}: {name} absolute angles must be within [0, 360]"
+                f"{path}: {name} mode 3 absolute angles must be within [0, 360]"
             )
         if float(joint["max_velocity_deg_s"]) <= 0.0:
             raise ValueError(f"{path}: {name} max velocity must be positive")
@@ -74,6 +75,21 @@ def load_calibration(path: Path) -> dict[str, Any]:
             max_opening_cm = joint.get("max_opening_cm")
             if not _finite_number(max_opening_cm) or float(max_opening_cm) <= 0.0:
                 raise ValueError(f"{path}: {name} max_opening_cm must be positive")
+            for endpoint in ("closed_absolute_deg", "open_absolute_deg"):
+                value = joint.get(endpoint)
+                if not _finite_number(value):
+                    raise ValueError(f"{path}: {name} {endpoint} must be finite")
+            closed = float(joint["closed_absolute_deg"])
+            opened = float(joint["open_absolute_deg"])
+            if closed == opened:
+                raise ValueError(f"{path}: gripper endpoints must be different")
+            if not (
+                float(joint["min_absolute_deg"])
+                <= min(closed, opened)
+                <= max(closed, opened)
+                <= float(joint["max_absolute_deg"])
+            ):
+                raise ValueError(f"{path}: gripper endpoints must be inside its limits")
 
     return calibration
 
@@ -131,12 +147,20 @@ def command_frame_deg(
     command_directions = [1.0] * len(names)
     if include_gripper:
         gripper_index = names.index(GRIPPER_JOINT)
-        command_mins[gripper_index] = 0.0
-        command_maxs[gripper_index] = (
-            controller_maxs[gripper_index] - controller_mins[gripper_index]
+        gripper = calibration["joints"][GRIPPER_JOINT]
+        degrees_per_tick = float(calibration["degrees_per_tick"])
+        zero_deg = int(gripper["zero_ticks"]) * degrees_per_tick
+        direction = float(gripper["direction"])
+        closed_position = direction * (
+            float(gripper["closed_absolute_deg"]) - zero_deg
         )
-        command_origins[gripper_index] = controller_maxs[gripper_index]
-        command_directions[gripper_index] = -1.0
+        open_position = direction * (
+            float(gripper["open_absolute_deg"]) - zero_deg
+        )
+        command_mins[gripper_index] = 0.0
+        command_maxs[gripper_index] = abs(open_position - closed_position)
+        command_origins[gripper_index] = closed_position
+        command_directions[gripper_index] = 1.0 if open_position > closed_position else -1.0
     return (
         names,
         command_mins,

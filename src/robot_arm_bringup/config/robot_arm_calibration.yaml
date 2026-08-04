@@ -43,15 +43,17 @@ joints:
   gripper_joint:
     motor_id: 4
     expected_model: 1020
-    expected_operating_mode: 3
+    expected_operating_mode: 4
     expected_drive_mode: 0
-    # Keep the measured controller angle frame. In this frame the gripper is
-    # closed at +153.11 deg and open at -127.80 deg. The degree bridge maps
-    # the user frame (closed = 0 deg, opening = positive) into this frame.
+    # Direct SDK endpoint measurements in Extended Position mode 4:
+    # closed=1782 ticks (156.62109375 deg), open=-1438 ticks
+    # (-126.38671875 deg). Keep the signed negative open endpoint unwrapped.
     zero_ticks: 2305
     direction: 1.0
-    min_absolute_deg: 74.787890625
-    max_absolute_deg: 355.693359375
+    min_absolute_deg: -126.38671875
+    max_absolute_deg: 156.62109375
+    closed_absolute_deg: 156.62109375
+    open_absolute_deg: -126.38671875
     max_velocity_deg_s: 20.0
     # Measured finger-to-finger maximum opening.  Keep this value in sync with
     # the mechanism whenever the gripper link or fingers are changed.

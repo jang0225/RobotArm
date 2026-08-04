@@ -20,9 +20,13 @@ src/
 | 1 | XD430-T350 | `joint1` | 3 / 0 |
 | 2 | XD430-T350 | `joint2` | 3 / 0 |
 | 3 | XM430-W350 | `joint3` | 3 / 0 |
-| 4 | XM430-W350 | `gripper_joint` | 3 / 0 |
+| 4 | XM430-W350 | `gripper_joint` | 4 / 0 |
 
 통신은 Protocol 2.0, 1 Mbps, 기본 장치 `/dev/ttyUSB0`을 사용합니다. Dynamixel Wizard는 ROS 노드를 실행하기 전에 종료해야 합니다.
+
+ID 4는 Wizard에서 Torque Enable을 `0`으로 만든 뒤 Operating Mode를 `4`
+(Extended Position Control), Drive Mode를 `0`으로 설정합니다. ID 1~3은
+Operating Mode `3`을 유지합니다.
 
 ## 설치와 빌드
 
@@ -77,7 +81,7 @@ ros2 topic echo /joint_states
 | `joint1` | 179.296875° / 2040 | -98.456875° ~ 98.543125° |
 | `joint2` | 224.384766° / 2553 | -113.134766° ~ 113.135234° |
 | `joint3` | 208.740234° / 2375 | -103.290234° ~ 103.209766° |
-| `gripper_joint` | 202.587891° / 2305 (내부 제어 기준) | `0°`(닫힘) ~ 약 `280.91°`(열림) |
+| `gripper_joint` | 202.587891° / 2305 tick | `0°`(닫힘) ~ `283.007813°`(열림) |
 
 한 관절을 3초 동안 5도로 이동:
 
@@ -97,7 +101,9 @@ ros2 topic pub --once /joint_commands_deg \
 
 `joint1`~`joint3`의 `0°`는 각 관절의 보정된 중앙이다. 반면 `gripper_joint`의
 사용자 명령은 완전 닫힘을 `0°`, 열린 방향을 양수로 사용한다. 내부 제어 각도는
-측정값인 닫힘 `153.11°`, 열림 `-127.80°`를 유지하며 bridge가 자동 변환한다.
+SDK로 직접 측정한 닫힘 `1782 tick`, 열림 `-1438 tick`을 감싸지 않고 그대로 사용한다.
+기구가 닫힘에서 열림까지 음의 방향으로 `283.007813°` 회전해야 하므로 ID 4에는
+Extended Position Control mode 4가 필요하다.
 현재 위치와 멀다면 작은 목표를 긴 시간으로 나누어 보내세요. 제한을 벗어난 유한한 degree 명령은
 해당 관절의 최소·최대값으로 자동 제한됩니다. 한 관절이 제한에 걸리거나 잘못된 값을
 받아도 다른 관절의 명령은 계속 처리됩니다.
@@ -119,8 +125,8 @@ ros2 run robot_arm_controller fish_motion_node --ros-args \
 ## 그리퍼 열림 거리(cm) 제어
 
 그리퍼는 `0 cm = 완전 닫힘`, `13 cm = 설정된 안전 최대 열림`으로 명령할 수 있다.
-`gripper_opening_bridge`가 cm 명령을 그리퍼 각도로 변환한 뒤 기존 안전 경로를 그대로
-통과시킨다.
+`gripper_opening_bridge`가 현재 위치를 사용하지 않고 cm를 실측 내부 절대각으로
+변환해 trajectory controller 또는 FSS supervisor 입력으로 직접 전달한다.
 
 ```bash
 ros2 topic pub --once /gripper_opening_cm \
@@ -135,10 +141,15 @@ ros2 topic pub --once /gripper_opening_cm \
 각 명령은 현재 위치로부터의 이동량이 아니라 절대 열림 목표다. 예를 들어 벌어진
 상태에서 `opening_cm: 0.0`을 보내면 완전 닫힘 위치로 이동한다.
 
+```text
+0 cm  → motor 156.621094°  → controller -45.966797°  → tick 1782
+13 cm → motor -126.386719° → controller -328.974609° → tick -1438
+```
+
 ## 전체 4모터 실행
 
-그리퍼 사용자 명령에서 `0°`는 닫힘, 약 `280.91°`는 열림 끝이다. 내부 제어는
-닫힘 `153.11°`, 열림 `-127.80°`의 실측 degree를 사용한다. 현재 USB 포트명을
+그리퍼 사용자 명령에서 `0°`는 닫힘, `283.007813°`는 열림 끝이다. signed 모터 각은
+닫힘 `156.621094°`, 열림 `-126.386719°`이며 내부 controller 좌표로 변환해 사용한다. 현재 USB 포트명을
 확인한 뒤 실행합니다.
 
 ```bash
