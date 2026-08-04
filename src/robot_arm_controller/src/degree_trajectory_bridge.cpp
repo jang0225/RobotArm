@@ -13,6 +13,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "robot_arm_controller/angle_utils.hpp"
 #include "robot_arm_controller/msg/joint_command_degrees.hpp"
+#include "sensor_msgs/msg/joint_state.hpp"
 #include "trajectory_msgs/msg/joint_trajectory.hpp"
 #include "trajectory_msgs/msg/joint_trajectory_point.hpp"
 
@@ -57,11 +58,24 @@ public:
     subscription_ = create_subscription<robot_arm_controller::msg::JointCommandDegrees>(
       "joint_commands_deg", 10,
       std::bind(&DegreeTrajectoryBridge::command_callback, this, std::placeholders::_1));
+    joint_state_subscription_ = create_subscription<sensor_msgs::msg::JointState>(
+      "joint_states", rclcpp::SensorDataQoS(),
+      std::bind(&DegreeTrajectoryBridge::joint_state_callback, this, std::placeholders::_1));
     RCLCPP_INFO(
-      get_logger(), "Degree commands: 'joint_commands_deg' -> '%s'", output_topic.c_str());
+      get_logger(), "Absolute degree commands: 'joint_commands_deg' -> '%s'", output_topic.c_str());
   }
 
 private:
+  void joint_state_callback(const sensor_msgs::msg::JointState::SharedPtr message)
+  {
+    const auto count = std::min(message->name.size(), message->position.size());
+    for (std::size_t i = 0; i < count; ++i) {
+      if (joint_index_.count(message->name[i]) != 0 && std::isfinite(message->position[i])) {
+        current_positions_[message->name[i]] = message->position[i];
+      }
+    }
+  }
+
   void command_callback(
     const robot_arm_controller::msg::JointCommandDegrees::SharedPtr msg)
   {
@@ -78,9 +92,13 @@ private:
     }
 
     trajectory_msgs::msg::JointTrajectory trajectory;
-    trajectory.header.stamp = now();
-    trajectory_msgs::msg::JointTrajectoryPoint point;
+    // Leave the stamp at zero so the controller starts immediately.  The
+    // first point below is the measured state, while the second is always an
+    // absolute target; no command is treated as a position increment.
+    trajectory_msgs::msg::JointTrajectoryPoint target_point;
     std::unordered_set<std::string> commanded;
+    bool have_current_start = true;
+    std::vector<double> current_start_positions;
 
     for (std::size_t i = 0; i < msg->joint_names.size(); ++i) {
       const auto found = joint_index_.find(msg->joint_names[i]);
@@ -105,9 +123,16 @@ private:
           msg->joint_names[i].c_str(), degrees, bounded_degrees);
       }
       trajectory.joint_names.push_back(msg->joint_names[i]);
-      point.positions.push_back(
+      target_point.positions.push_back(
         robot_arm_controller::angle_utils::degrees_to_radians(bounded_degrees));
-      point.velocities.push_back(0.0);
+      target_point.velocities.push_back(0.0);
+
+      const auto current = current_positions_.find(msg->joint_names[i]);
+      if (current == current_positions_.end()) {
+        have_current_start = false;
+      } else {
+        current_start_positions.push_back(current->second);
+      }
     }
 
     if (trajectory.joint_names.empty()) {
@@ -117,10 +142,18 @@ private:
 
     const auto duration_nanoseconds = static_cast<int64_t>(
       std::llround(msg->duration_sec * 1e9));
-    point.time_from_start.sec = static_cast<int32_t>(duration_nanoseconds / 1000000000LL);
-    point.time_from_start.nanosec = static_cast<uint32_t>(
+    target_point.time_from_start.sec = static_cast<int32_t>(duration_nanoseconds / 1000000000LL);
+    target_point.time_from_start.nanosec = static_cast<uint32_t>(
       duration_nanoseconds % 1000000000LL);
-    trajectory.points.push_back(std::move(point));
+    if (have_current_start) {
+      trajectory_msgs::msg::JointTrajectoryPoint start_point;
+      start_point.positions = std::move(current_start_positions);
+      start_point.velocities.assign(start_point.positions.size(), 0.0);
+      // A zero-time point makes the measured state the explicit start of the
+      // absolute trajectory, including when the requested target is 0.
+      trajectory.points.push_back(std::move(start_point));
+    }
+    trajectory.points.push_back(std::move(target_point));
     publisher_->publish(trajectory);
   }
 
@@ -129,8 +162,10 @@ private:
   std::vector<double> max_positions_deg_;
   double max_duration_sec_{120.0};
   std::unordered_map<std::string, std::size_t> joint_index_;
+  std::unordered_map<std::string, double> current_positions_;
   rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr publisher_;
   rclcpp::Subscription<robot_arm_controller::msg::JointCommandDegrees>::SharedPtr subscription_;
+  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_subscription_;
 };
 
 int main(int argc, char * argv[])

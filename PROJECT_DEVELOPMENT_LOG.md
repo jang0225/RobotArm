@@ -103,6 +103,11 @@ Dynamixel의 position 값은 tick 단위다. 1회전이 4096 tick이므로 현�
 degree bridge와 FSS supervisor 경로로 전달한다. 현재는 선형 변환이며, 링크식 오차가
 확인되면 다점 보정표로 확장한다.
 
+cm 명령의 절대 목표 의미를 controller 입력까지 명확히 유지하기 위해 degree bridge는
+`/joint_states`의 측정 위치를 0초 시작점으로 넣고, 명령값을 마지막 절대 목표점으로
+전달한다. 따라서 벌어진 상태에서 `0 cm`를 보내면 현재 위치에서 0만큼 이동하는 것이
+아니라, 완전 닫힘 기준 위치로 이동해야 한다.
+
 ## 4. 구현 과정
 
 ### 4.1 Dynamixel SDK 직접 제어에서 ros2_control 구조로 확장

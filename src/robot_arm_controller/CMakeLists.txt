@@ -37,7 +37,7 @@ ament_target_dependencies(trajectory_validator builtin_interfaces trajectory_msg
 add_executable(degree_trajectory_bridge src/degree_trajectory_bridge.cpp)
 target_compile_features(degree_trajectory_bridge PUBLIC cxx_std_17)
 target_include_directories(degree_trajectory_bridge PRIVATE include)
-ament_target_dependencies(degree_trajectory_bridge rclcpp trajectory_msgs)
+ament_target_dependencies(degree_trajectory_bridge rclcpp sensor_msgs trajectory_msgs)
 target_link_libraries(degree_trajectory_bridge "${cpp_typesupport_target}")
 
 add_executable(gripper_opening_bridge src/gripper_opening_bridge.cpp)
