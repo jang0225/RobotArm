@@ -29,6 +29,14 @@ public:
       "min_position_deg", std::vector<double>{});
     max_positions_deg_ = declare_parameter<std::vector<double>>(
       "max_position_deg", std::vector<double>{});
+    controller_min_positions_deg_ = declare_parameter<std::vector<double>>(
+      "controller_min_position_deg", std::vector<double>{});
+    controller_max_positions_deg_ = declare_parameter<std::vector<double>>(
+      "controller_max_position_deg", std::vector<double>{});
+    command_origins_deg_ = declare_parameter<std::vector<double>>(
+      "command_origin_deg", std::vector<double>{});
+    command_directions_ = declare_parameter<std::vector<double>>(
+      "command_direction", std::vector<double>{});
     max_duration_sec_ = declare_parameter<double>("max_duration_sec", 120.0);
     const auto output_topic = declare_parameter<std::string>(
       "output_topic", "/arm_trajectory_controller/joint_trajectory");
@@ -43,11 +51,35 @@ public:
     if (!std::isfinite(max_duration_sec_) || max_duration_sec_ <= 0.0) {
       throw std::invalid_argument("max_duration_sec must be positive and finite");
     }
+    if (controller_min_positions_deg_.empty()) {
+      controller_min_positions_deg_ = min_positions_deg_;
+    }
+    if (controller_max_positions_deg_.empty()) {
+      controller_max_positions_deg_ = max_positions_deg_;
+    }
+    if (command_origins_deg_.empty()) {
+      command_origins_deg_.assign(joint_names_.size(), 0.0);
+    }
+    if (command_directions_.empty()) {
+      command_directions_.assign(joint_names_.size(), 1.0);
+    }
+    if (controller_min_positions_deg_.size() != joint_names_.size() ||
+      controller_max_positions_deg_.size() != joint_names_.size() ||
+      command_origins_deg_.size() != joint_names_.size() ||
+      command_directions_.size() != joint_names_.size())
+    {
+      throw std::invalid_argument("degree bridge command-frame parameter sizes must match joint_names");
+    }
     for (std::size_t i = 0; i < joint_names_.size(); ++i) {
       if (joint_names_[i].empty() ||
         !std::isfinite(min_positions_deg_[i]) ||
         !std::isfinite(max_positions_deg_[i]) ||
         min_positions_deg_[i] > max_positions_deg_[i] ||
+        !std::isfinite(controller_min_positions_deg_[i]) ||
+        !std::isfinite(controller_max_positions_deg_[i]) ||
+        controller_min_positions_deg_[i] > controller_max_positions_deg_[i] ||
+        !std::isfinite(command_origins_deg_[i]) ||
+        !std::isfinite(command_directions_[i]) || command_directions_[i] == 0.0 ||
         !joint_index_.emplace(joint_names_[i], i).second)
       {
         throw std::invalid_argument("invalid or duplicate degree bridge joint parameter");
@@ -122,9 +154,12 @@ private:
           get_logger(), "%s command %.3f deg saturated to %.3f deg",
           msg->joint_names[i].c_str(), degrees, bounded_degrees);
       }
+      const double controller_degrees = std::clamp(
+        command_origins_deg_[joint] + command_directions_[joint] * bounded_degrees,
+        controller_min_positions_deg_[joint], controller_max_positions_deg_[joint]);
       trajectory.joint_names.push_back(msg->joint_names[i]);
       target_point.positions.push_back(
-        robot_arm_controller::angle_utils::degrees_to_radians(bounded_degrees));
+        robot_arm_controller::angle_utils::degrees_to_radians(controller_degrees));
       target_point.velocities.push_back(0.0);
 
       const auto current = current_positions_.find(msg->joint_names[i]);
@@ -160,6 +195,10 @@ private:
   std::vector<std::string> joint_names_;
   std::vector<double> min_positions_deg_;
   std::vector<double> max_positions_deg_;
+  std::vector<double> controller_min_positions_deg_;
+  std::vector<double> controller_max_positions_deg_;
+  std::vector<double> command_origins_deg_;
+  std::vector<double> command_directions_;
   double max_duration_sec_{120.0};
   std::unordered_map<std::string, std::size_t> joint_index_;
   std::unordered_map<std::string, double> current_positions_;

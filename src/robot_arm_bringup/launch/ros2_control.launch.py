@@ -10,6 +10,7 @@ from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitut
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from robot_arm_bringup.calibration import (
+    command_frame_deg,
     load_calibration,
     relative_limits_deg,
     xacro_arguments,
@@ -22,7 +23,9 @@ def generate_launch_description():
     calibration = load_calibration(share / "config" / "robot_arm_calibration.yaml")
     xacro_calibration_arguments = xacro_arguments(calibration)
     arm_names, arm_mins, arm_maxs, _ = relative_limits_deg(calibration, False)
-    all_names, all_mins, all_maxs, _ = relative_limits_deg(calibration, True)
+    all_names, all_command_mins, all_command_maxs, all_mins, all_maxs, all_command_origins, all_command_directions = command_frame_deg(
+        calibration, True
+    )
     gripper_index = all_names.index("gripper_joint")
     gripper_max_opening_cm = calibration["joints"]["gripper_joint"]["max_opening_cm"]
     device_name = LaunchConfiguration("device_name")
@@ -135,8 +138,12 @@ def generate_launch_description():
         parameters=[
             {
                 "joint_names": all_names,
-                "min_position_deg": all_mins,
-                "max_position_deg": all_maxs,
+                "min_position_deg": all_command_mins,
+                "max_position_deg": all_command_maxs,
+                "controller_min_position_deg": all_mins,
+                "controller_max_position_deg": all_maxs,
+                "command_origin_deg": all_command_origins,
+                "command_direction": all_command_directions,
                 "output_topic": trajectory_output_topic,
             }
         ],
@@ -150,7 +157,7 @@ def generate_launch_description():
         parameters=[
             {
                 "max_opening_cm": gripper_max_opening_cm,
-                "max_opening_deg": all_maxs[gripper_index],
+                "max_opening_deg": all_command_maxs[gripper_index],
                 "output_topic": "joint_commands_deg",
             }
         ],

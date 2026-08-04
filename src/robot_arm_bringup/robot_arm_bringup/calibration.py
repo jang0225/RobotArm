@@ -106,6 +106,48 @@ def relative_limits_deg(
     return names, minimums, maximums, velocities
 
 
+def command_frame_deg(
+    calibration: dict[str, Any], include_gripper: bool
+) -> tuple[
+    list[str],
+    list[float],
+    list[float],
+    list[float],
+    list[float],
+    list[float],
+    list[float],
+]:
+    """Return public-command and internal-controller degree frames.
+
+    Arm joints share both frames. The gripper's public frame is closed=0 with
+    positive opening, while its controller keeps the measured angle frame.
+    """
+    names, controller_mins, controller_maxs, _ = relative_limits_deg(
+        calibration, include_gripper
+    )
+    command_mins = list(controller_mins)
+    command_maxs = list(controller_maxs)
+    command_origins = [0.0] * len(names)
+    command_directions = [1.0] * len(names)
+    if include_gripper:
+        gripper_index = names.index(GRIPPER_JOINT)
+        command_mins[gripper_index] = 0.0
+        command_maxs[gripper_index] = (
+            controller_maxs[gripper_index] - controller_mins[gripper_index]
+        )
+        command_origins[gripper_index] = controller_maxs[gripper_index]
+        command_directions[gripper_index] = -1.0
+    return (
+        names,
+        command_mins,
+        command_maxs,
+        controller_mins,
+        controller_maxs,
+        command_origins,
+        command_directions,
+    )
+
+
 def xacro_arguments(calibration: dict[str, Any]) -> list[str]:
     """Return xacro name:=value arguments for every calibrated motor."""
     arguments = [

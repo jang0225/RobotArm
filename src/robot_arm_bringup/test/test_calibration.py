@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from robot_arm_bringup.calibration import (
+    command_frame_deg,
     load_calibration,
     relative_limits_deg,
     selected_joint_names,
@@ -27,13 +28,37 @@ def test_relative_limits_are_centered_and_ordered():
     calibration = load_calibration(CALIBRATION)
     names, minimums, maximums, velocities = relative_limits_deg(calibration, True)
     assert names == ["joint1", "joint2", "joint3", "gripper_joint"]
-    # Arm joints use their mechanical centre as zero.  The gripper instead uses
-    # fully closed as zero, so its permitted range starts at zero.
+    # The controller keeps the gripper's measured angle frame. The launch
+    # layer maps the public closed=0 command frame onto this range.
     assert all(minimum < 0.0 < maximum for minimum, maximum in zip(minimums[:3], maximums[:3]))
     assert all(velocity > 0.0 for velocity in velocities)
-    assert minimums[3] == pytest.approx(0.0)
-    assert maximums[3] == pytest.approx(278.905469)
+    assert minimums[3] == pytest.approx(-127.8)
+    assert maximums[3] == pytest.approx(153.105469)
     assert calibration["joints"]["gripper_joint"]["max_opening_cm"] == 13.0
+
+
+def test_gripper_public_frame_maps_closed_and_open_to_measured_degrees():
+    calibration = load_calibration(CALIBRATION)
+    (
+        names,
+        command_mins,
+        command_maxs,
+        controller_mins,
+        controller_maxs,
+        command_origins,
+        command_directions,
+    ) = command_frame_deg(calibration, True)
+    gripper_index = names.index("gripper_joint")
+
+    assert command_mins[gripper_index] == pytest.approx(0.0)
+    assert command_maxs[gripper_index] == pytest.approx(280.905469)
+    assert command_origins[gripper_index] == pytest.approx(153.105469)
+    assert command_directions[gripper_index] == -1.0
+    assert command_origins[gripper_index] == pytest.approx(controller_maxs[gripper_index])
+    assert (
+        command_origins[gripper_index]
+        + command_directions[gripper_index] * command_maxs[gripper_index]
+    ) == pytest.approx(controller_mins[gripper_index])
 
 
 def test_xacro_receives_every_motor_calibration():
