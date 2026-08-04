@@ -12,6 +12,8 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "robot_arm_controller/angle_utils.hpp"
+#include "robot_arm_controller/gripper_utils.hpp"
+#include "robot_arm_controller/msg/arm_gripper_command.hpp"
 #include "robot_arm_controller/msg/joint_command_degrees.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "trajectory_msgs/msg/joint_trajectory.hpp"
@@ -38,6 +40,7 @@ public:
     command_directions_ = declare_parameter<std::vector<double>>(
       "command_direction", std::vector<double>{});
     max_duration_sec_ = declare_parameter<double>("max_duration_sec", 120.0);
+    max_gripper_opening_cm_ = declare_parameter<double>("max_gripper_opening_cm", 13.0);
     const auto output_topic = declare_parameter<std::string>(
       "output_topic", "/arm_trajectory_controller/joint_trajectory");
 
@@ -48,8 +51,10 @@ public:
               "degree bridge requires matching joint_names/min_position_deg/max_position_deg; "
               "start it through robot_arm_bringup");
     }
-    if (!std::isfinite(max_duration_sec_) || max_duration_sec_ <= 0.0) {
-      throw std::invalid_argument("max_duration_sec must be positive and finite");
+    if (!std::isfinite(max_duration_sec_) || max_duration_sec_ <= 0.0 ||
+      !std::isfinite(max_gripper_opening_cm_) || max_gripper_opening_cm_ <= 0.0)
+    {
+      throw std::invalid_argument("duration and gripper opening limits must be positive and finite");
     }
     if (controller_min_positions_deg_.empty()) {
       controller_min_positions_deg_ = min_positions_deg_;
@@ -90,11 +95,24 @@ public:
     subscription_ = create_subscription<robot_arm_controller::msg::JointCommandDegrees>(
       "joint_commands_deg", 10,
       std::bind(&DegreeTrajectoryBridge::command_callback, this, std::placeholders::_1));
+    if (joint_index_.count("gripper_joint") != 0) {
+      arm_gripper_subscription_ =
+        create_subscription<robot_arm_controller::msg::ArmGripperCommand>(
+        "arm_gripper_commands", 10,
+        std::bind(
+          &DegreeTrajectoryBridge::arm_gripper_command_callback, this,
+          std::placeholders::_1));
+    }
     joint_state_subscription_ = create_subscription<sensor_msgs::msg::JointState>(
       "joint_states", rclcpp::SensorDataQoS(),
       std::bind(&DegreeTrajectoryBridge::joint_state_callback, this, std::placeholders::_1));
     RCLCPP_INFO(
       get_logger(), "Absolute degree commands: 'joint_commands_deg' -> '%s'", output_topic.c_str());
+    if (arm_gripper_subscription_) {
+      RCLCPP_INFO(
+        get_logger(),
+        "Combined commands: joint1..3 in deg and gripper in cm on 'arm_gripper_commands'");
+    }
   }
 
 private:
@@ -111,12 +129,50 @@ private:
   void command_callback(
     const robot_arm_controller::msg::JointCommandDegrees::SharedPtr msg)
   {
-    if (msg->joint_names.empty() || msg->joint_names.size() != msg->positions_deg.size()) {
+    process_command(*msg);
+  }
+
+  void arm_gripper_command_callback(
+    const robot_arm_controller::msg::ArmGripperCommand::SharedPtr msg)
+  {
+    const auto gripper = joint_index_.find("gripper_joint");
+    if (gripper == joint_index_.end()) {
+      RCLCPP_ERROR(get_logger(), "Combined arm/gripper command requires use_gripper:=true");
+      return;
+    }
+    if (!std::isfinite(msg->gripper_opening_cm)) {
+      RCLCPP_ERROR(get_logger(), "gripper_opening_cm must be finite");
+      return;
+    }
+    const double bounded_cm = std::clamp(
+      msg->gripper_opening_cm, 0.0, max_gripper_opening_cm_);
+    if (bounded_cm != msg->gripper_opening_cm) {
+      RCLCPP_WARN(
+        get_logger(), "Gripper command %.3f cm saturated to %.3f cm",
+        msg->gripper_opening_cm, bounded_cm);
+    }
+
+    robot_arm_controller::msg::JointCommandDegrees command;
+    command.joint_names = {"joint1", "joint2", "joint3", "gripper_joint"};
+    command.positions_deg = {
+      msg->joint1_deg,
+      msg->joint2_deg,
+      msg->joint3_deg,
+      robot_arm_controller::gripper_utils::opening_cm_to_position_degrees(
+        bounded_cm, max_gripper_opening_cm_, 0.0,
+        max_positions_deg_[gripper->second])};
+    command.duration_sec = msg->duration_sec;
+    process_command(command);
+  }
+
+  void process_command(const robot_arm_controller::msg::JointCommandDegrees & msg)
+  {
+    if (msg.joint_names.empty() || msg.joint_names.size() != msg.positions_deg.size()) {
       RCLCPP_ERROR(get_logger(), "joint_names and positions_deg must have the same non-zero length");
       return;
     }
-    if (!std::isfinite(msg->duration_sec) || msg->duration_sec <= 0.0 ||
-      msg->duration_sec > max_duration_sec_)
+    if (!std::isfinite(msg.duration_sec) || msg.duration_sec <= 0.0 ||
+      msg.duration_sec > max_duration_sec_)
     {
       RCLCPP_ERROR(
         get_logger(), "duration_sec must be within (0, %.3f]", max_duration_sec_);
@@ -132,19 +188,19 @@ private:
     bool have_current_start = true;
     std::vector<double> current_start_positions;
 
-    for (std::size_t i = 0; i < msg->joint_names.size(); ++i) {
-      const auto found = joint_index_.find(msg->joint_names[i]);
-      if (found == joint_index_.end() || !commanded.insert(msg->joint_names[i]).second) {
+    for (std::size_t i = 0; i < msg.joint_names.size(); ++i) {
+      const auto found = joint_index_.find(msg.joint_names[i]);
+      if (found == joint_index_.end() || !commanded.insert(msg.joint_names[i]).second) {
         RCLCPP_ERROR(
-          get_logger(), "unknown or duplicate joint: %s", msg->joint_names[i].c_str());
+          get_logger(), "unknown or duplicate joint: %s", msg.joint_names[i].c_str());
         return;
       }
       const auto joint = found->second;
-      const double degrees = msg->positions_deg[i];
+      const double degrees = msg.positions_deg[i];
       if (!std::isfinite(degrees)) {
         RCLCPP_ERROR(
           get_logger(), "%s command is not finite; skipping this joint",
-          msg->joint_names[i].c_str());
+          msg.joint_names[i].c_str());
         continue;
       }
       const double bounded_degrees = std::clamp(
@@ -152,17 +208,17 @@ private:
       if (bounded_degrees != degrees) {
         RCLCPP_WARN(
           get_logger(), "%s command %.3f deg saturated to %.3f deg",
-          msg->joint_names[i].c_str(), degrees, bounded_degrees);
+          msg.joint_names[i].c_str(), degrees, bounded_degrees);
       }
       const double controller_degrees = std::clamp(
         command_origins_deg_[joint] + command_directions_[joint] * bounded_degrees,
         controller_min_positions_deg_[joint], controller_max_positions_deg_[joint]);
-      trajectory.joint_names.push_back(msg->joint_names[i]);
+      trajectory.joint_names.push_back(msg.joint_names[i]);
       target_point.positions.push_back(
         robot_arm_controller::angle_utils::degrees_to_radians(controller_degrees));
       target_point.velocities.push_back(0.0);
 
-      const auto current = current_positions_.find(msg->joint_names[i]);
+      const auto current = current_positions_.find(msg.joint_names[i]);
       if (current == current_positions_.end()) {
         have_current_start = false;
       } else {
@@ -176,7 +232,7 @@ private:
     }
 
     const auto duration_nanoseconds = static_cast<int64_t>(
-      std::llround(msg->duration_sec * 1e9));
+      std::llround(msg.duration_sec * 1e9));
     target_point.time_from_start.sec = static_cast<int32_t>(duration_nanoseconds / 1000000000LL);
     target_point.time_from_start.nanosec = static_cast<uint32_t>(
       duration_nanoseconds % 1000000000LL);
@@ -200,10 +256,13 @@ private:
   std::vector<double> command_origins_deg_;
   std::vector<double> command_directions_;
   double max_duration_sec_{120.0};
+  double max_gripper_opening_cm_{13.0};
   std::unordered_map<std::string, std::size_t> joint_index_;
   std::unordered_map<std::string, double> current_positions_;
   rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr publisher_;
   rclcpp::Subscription<robot_arm_controller::msg::JointCommandDegrees>::SharedPtr subscription_;
+  rclcpp::Subscription<robot_arm_controller::msg::ArmGripperCommand>::SharedPtr
+    arm_gripper_subscription_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_subscription_;
 };
 

@@ -99,6 +99,24 @@ ros2 topic pub --once /joint_commands_deg \
   "{joint_names: [joint1, joint2, joint3, gripper_joint], positions_deg: [5.0, -5.0, 8.0, 2.0], duration_sec: 3.0}"
 ```
 
+관절은 degree, 그리퍼는 cm로 한 번에 명령하려면 전용 combined 메시지를 사용한다.
+`duration_sec`를 줄이면 같은 목표까지 더 빠르게 움직이며, 큰 이동은 우선 `5~8초`로
+시험한 뒤 기구 하중과 간섭을 확인한다.
+
+```bash
+ros2 topic pub --once /arm_gripper_commands \
+  robot_arm_controller/msg/ArmGripperCommand \
+  "{joint1_deg: 25.0, joint2_deg: -35.0, joint3_deg: 40.0, gripper_opening_cm: 6.5, duration_sec: 5.0}"
+```
+
+정렬과 그리퍼 닫힘도 같은 단위 체계로 명령할 수 있다.
+
+```bash
+ros2 topic pub --once /arm_gripper_commands \
+  robot_arm_controller/msg/ArmGripperCommand \
+  "{joint1_deg: 0.0, joint2_deg: 0.0, joint3_deg: 0.0, gripper_opening_cm: 0.0, duration_sec: 5.0}"
+```
+
 `joint1`~`joint3`의 `0°`는 각 관절의 보정된 중앙이다. 반면 `gripper_joint`의
 사용자 명령은 완전 닫힘을 `0°`, 열린 방향을 양수로 사용한다. 내부 제어 각도는
 SDK로 직접 측정한 닫힘 `1782 tick`, 열림 `-1438 tick`을 감싸지 않고 그대로 사용한다.

@@ -20,6 +20,7 @@ find_package(rosidl_default_generators REQUIRED)
 find_package(fss_interfaces QUIET)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/ArmGripperCommand.msg"
   "msg/GripperCommandCm.msg"
   "msg/JointCommandDegrees.msg"
 )

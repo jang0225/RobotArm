@@ -148,6 +148,7 @@ def generate_launch_description():
                 "controller_max_position_deg": all_maxs,
                 "command_origin_deg": all_command_origins,
                 "command_direction": all_command_directions,
+                "max_gripper_opening_cm": gripper_max_opening_cm,
                 "output_topic": trajectory_output_topic,
             }
         ],

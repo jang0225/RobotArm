@@ -117,6 +117,12 @@ controller 목표각 = 모터 signed 목표각 - 202.587890625°
 trajectory controller 또는 FSS supervisor 입력으로 직접 전달한다. 현재는 선형
 변환이며, 링크식 오차가 확인되면 다점 보정표로 확장한다.
 
+네 모터를 함께 조작할 때도 단위가 섞이지 않도록 `ArmGripperCommand` 메시지를
+추가했다. `joint1_deg`~`joint3_deg`는 degree, `gripper_opening_cm`는 cm,
+`duration_sec`는 공통 도달 시간이다. 변환된 네 목표는 하나의 `JointTrajectory`로
+발행되므로 동시에 시작하고 같은 시간에 도달한다. 기존 degree 및 gripper 단독
+토픽은 호환성을 위해 유지했다.
+
 cm 변환 노드는 `/joint_states`와 현재 command를 참조하지 않는다. 실측한 두 끝점으로
 내부 절대각 하나를 계산해 `JointTrajectory` 목표점으로 발행한다. 따라서 같은 cm
 명령을 반복하면 같은 내부 각도와 같은 tick이 생성되고, 두 번째 명령은 추가 이동을

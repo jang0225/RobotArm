@@ -118,6 +118,7 @@ E-stop은 latch된다. 이후 mode가 바뀌어도 torque가 자동으로 켜지
 |---|---|---|
 | `/robot_arm/joint_commands_deg` | `robot_arm_controller/msg/JointCommandDegrees` | 사용자 degree 명령 |
 | `/robot_arm/gripper_opening_cm` | `robot_arm_controller/msg/GripperCommandCm` | 그리퍼 손가락 간격 명령 |
+| `/robot_arm/arm_gripper_commands` | `robot_arm_controller/msg/ArmGripperCommand` | 관절 degree와 그리퍼 cm 동시 명령 |
 | `/robot_arm/requested_joint_trajectory` | `trajectory_msgs/msg/JointTrajectory` | 표준 radian 궤적 요청 |
 | `/robot_arm/joint_states` | `sensor_msgs/msg/JointState` | 관절 측정 상태 |
 | `/robot_arm/fss_supervisor_status` | `std_msgs/msg/String` | 명령 허용·차단 상태 |
@@ -383,6 +384,7 @@ RobotArm 오류를 FSS manager의 공식 health와 `SAFE_HOLD` 전이에 포함�
 ```text
 /robot_arm/joint_commands_deg
 /robot_arm/gripper_opening_cm
+/robot_arm/arm_gripper_commands
 /robot_arm/requested_joint_trajectory
 ```
 
