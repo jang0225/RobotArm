@@ -70,6 +70,10 @@ def load_calibration(path: Path) -> dict[str, Any]:
             )
         if float(joint["max_velocity_deg_s"]) <= 0.0:
             raise ValueError(f"{path}: {name} max velocity must be positive")
+        if name == GRIPPER_JOINT:
+            max_opening_cm = joint.get("max_opening_cm")
+            if not _finite_number(max_opening_cm) or float(max_opening_cm) <= 0.0:
+                raise ValueError(f"{path}: {name} max_opening_cm must be positive")
 
     return calibration
 
@@ -84,7 +88,7 @@ def selected_joint_names(include_gripper: bool) -> list[str]:
 def relative_limits_deg(
     calibration: dict[str, Any], include_gripper: bool
 ) -> tuple[list[str], list[float], list[float], list[float]]:
-    """Return names and center-relative min/max/velocity values in degrees."""
+    """Return names and reference-relative min/max/velocity values in degrees."""
     degrees_per_tick = float(calibration["degrees_per_tick"])
     names = selected_joint_names(include_gripper)
     minimums: list[float] = []

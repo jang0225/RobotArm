@@ -44,10 +44,18 @@ joints:
     motor_id: 4
     expected_model: 1020
     expected_operating_mode: 3
-    expected_drive_mode: 4
-    zero_ticks: 2305
-    direction: 1.0
-    # Temporary narrow range until the gripper mechanism is completed.
-    min_absolute_deg: 197.587890625
-    max_absolute_deg: 207.587890625
+    expected_drive_mode: 0
+    # Fully closed is the user reference: 0 deg.  A positive command opens
+    # the gripper, so the encoder direction is intentionally reversed here.
+    # The values were derived from the measured former-reference endpoints:
+    # closed = 153.11 deg, open = -127.80 deg, with the old zero at tick 2305.
+    zero_ticks: 4047
+    direction: -1.0
+    # Keep a 2 degree margin at the fully open mechanical stop.  The closed
+    # endpoint remains 0 degrees so normal gripper commands are intuitive.
+    min_absolute_deg: 76.787890625
+    max_absolute_deg: 355.693359375
     max_velocity_deg_s: 20.0
+    # Measured finger-to-finger maximum opening.  Keep this value in sync with
+    # the mechanism whenever the gripper link or fingers are changed.
+    max_opening_cm: 13.0

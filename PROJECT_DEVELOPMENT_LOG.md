@@ -26,7 +26,7 @@ ROS 2 Humble과 C++를 사용해 Dynamixel 기반 로봇팔을 제어하는 프�
 | 1 | XD430-T350 | `joint1` | 3, Position Control | 0 |
 | 2 | XD430-T350 | `joint2` | 3, Position Control | 0 |
 | 3 | XM430-W350 | `joint3` | 3, Position Control | 0 |
-| 4 | XM430-W350 | `gripper_joint` | 3, Position Control | 4 |
+| 4 | XM430-W350 | `gripper_joint` | 3, Position Control | 0 |
 
 - Protocol: Dynamixel Protocol 2.0
 - Baud rate: 1 Mbps
@@ -73,9 +73,9 @@ Dynamixel의 position 값은 tick 단위다. 1회전이 4096 tick이므로 현�
 로봇팔을 조작할 때 모터의 절대각보다 관절 중앙을 `0°`로 사용하는 편이 직관적이므로 다음 변환을 적용했다.
 
 ```text
-관절각(rad) = direction × (현재 tick - 중앙 tick) × radians_per_tick
+관절각(rad) = direction × (현재 tick - 기준 tick) × radians_per_tick
 
-목표 tick = 중앙 tick
+목표 tick = 기준 tick
           + 목표 관절각(rad) / (direction × radians_per_tick)
 ```
 
@@ -91,6 +91,17 @@ Dynamixel의 position 값은 tick 단위다. 1회전이 4096 tick이므로 현�
 | `gripper_joint` | 미측정 | 임시 범위 | 2305 | -5° ~ 5° |
 
 `joint3`은 링크를 분리했다가 다시 조립하면서 가동 범위가 바뀌었다. 이전 보정값을 그대로 사용하지 않고 103.45°~313.95°를 다시 측정하여 중앙 tick과 제한을 재계산했다. 이를 통해 소프트웨어 보정값이 기구 조립 상태에 종속된다는 점을 확인했다.
+
+그리퍼는 중앙 관절이 아니므로 별도 기준을 사용한다. 완전 닫힘 위치의 tick을
+`zero_ticks`로 저장하고 사용자 명령을 `닫힘 = 0°`, `열림 = 양수`로 정의한다.
+기존 임시 기준 tick 2305에서 측정한 닫힘 `153.11°`, 열림 `-127.80°`를 변환해
+닫힘 tick 4047을 기준점으로 적용했다. 총 가동 범위는 약 `280.91°`이며, 완전 열림
+끝에는 2° 소프트웨어 안전 여유를 적용했다.
+
+그리퍼 손가락 간격은 최대 열림에서 13 cm로 측정했다. 이에 따라 `GripperCommandCm`
+메시지와 변환 노드를 추가해 `0 cm = 닫힘`, `13 cm = 안전 최대 열림` 명령을 기존
+degree bridge와 FSS supervisor 경로로 전달한다. 현재는 선형 변환이며, 링크식 오차가
+확인되면 다점 보정표로 확장한다.
 
 ## 4. 구현 과정
 
@@ -300,6 +311,22 @@ joint3 → -20° 그대로 실행
 관절별 포화 동작은 회귀 테스트로 고정했다. 테스트는 `joint1`이 상한을 초과해도
 `joint2` 목표가 수정되거나 제거되지 않는지 직접 확인한다.
 
+### 7.2 링크 사양 갱신 원칙
+
+관절의 중앙 tick과 가동 범위는 `robot_arm_calibration.yaml`에서 관리하지만, 링크의
+기구 사양은 `robot_arm.urdf.xacro`에서 관리한다. 따라서 링크를 새로 제작·교체하거나
+그리퍼를 완성한 경우에는 다음 두 계층을 함께 갱신해야 한다.
+
+| 변경 대상 | 갱신 파일 | 필요한 값 | 영향 범위 |
+|---|---|---|---|
+| 모터·관절 보정 | `config/robot_arm_calibration.yaml` | ID, 기준 tick, 방향, 절대 최소·최대각, 최대 속도 | 직접 제어, 안전 제한, degree 명령 |
+| 링크 기구 사양 | `urdf/robot_arm.urdf.xacro` | 링크 길이, joint origin/axis, visual·collision geometry, 질량, inertia | RViz, TF, MoveIt 2, 충돌 판정, 동역학 |
+
+현재 Xacro의 link 길이와 box 형상은 임시 표현이다. 실제 사양을 반영하기 전에는
+MoveIt 2의 충돌 없는 경로 계획이나 동역학 결과를 실제 기구 기준으로 사용하지 않는다.
+링크 재조립으로 관절 가동 범위가 바뀌는 경우에는 URDF 사양 갱신과 calibration 재측정을
+하나의 변경으로 기록한다.
+
 ## 8. 검증 기록
 
 ### 정적 및 빌드 검증
@@ -408,7 +435,7 @@ ROS 2 `ros2_control`과 Dynamixel SDK를 이용해 3축 관절 및 그리퍼를 
 
 ## 11. 향후 개선 계획
 
-- ID 4 그리퍼 조립 후 실제 중앙 tick과 가동 범위 재측정
+- ID 4 그리퍼의 완전 닫힘 기준 tick과 안전 가동 범위 반영
 - 실제 링크 질량, 관성 및 collision geometry 반영
 - 실제 하드웨어에서 Bus Watchdog 발동·복구와 Hardware Error 진단 시험
 - 다회전 관절이 추가될 경우 calibration schema 확장

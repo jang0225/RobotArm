@@ -4,6 +4,7 @@
 #include <unordered_map>
 
 #include "gtest/gtest.h"
+#include "robot_arm_controller/gripper_utils.hpp"
 #include "robot_arm_controller/trajectory_validator.hpp"
 #include "trajectory_msgs/msg/joint_trajectory.hpp"
 #include "trajectory_msgs/msg/joint_trajectory_point.hpp"
@@ -31,6 +32,16 @@ const std::unordered_map<std::string, JointLimit> kLimits{
 };
 
 const TrajectoryValidationOptions kOptions{100, 10.0, true};
+
+TEST(GripperUtils, ConvertsCentimetersToPositiveOpeningDegrees)
+{
+  EXPECT_DOUBLE_EQ(
+    robot_arm_controller::gripper_utils::opening_cm_to_degrees(0.0, 13.0, 278.0), 0.0);
+  EXPECT_DOUBLE_EQ(
+    robot_arm_controller::gripper_utils::opening_cm_to_degrees(6.5, 13.0, 278.0), 139.0);
+  EXPECT_DOUBLE_EQ(
+    robot_arm_controller::gripper_utils::opening_cm_to_degrees(20.0, 13.0, 278.0), 278.0);
+}
 
 TEST(TrajectoryValidator, SaturatesOnlyTheJointOutsideItsLimit)
 {

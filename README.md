@@ -20,7 +20,7 @@ src/
 | 1 | XD430-T350 | `joint1` | 3 / 0 |
 | 2 | XD430-T350 | `joint2` | 3 / 0 |
 | 3 | XM430-W350 | `joint3` | 3 / 0 |
-| 4 | XM430-W350 | `gripper_joint` | 3 / 4 |
+| 4 | XM430-W350 | `gripper_joint` | 3 / 0 |
 
 통신은 Protocol 2.0, 1 Mbps, 기본 장치 `/dev/ttyUSB0`을 사용합니다. Dynamixel Wizard는 ROS 노드를 실행하기 전에 종료해야 합니다.
 
@@ -68,7 +68,7 @@ ros2 topic echo /joint_states
 
 `/joint_states`는 ROS 표준에 따라 radian 단위입니다.
 
-## 중앙 0도 기준 제어
+## 기준 0도 제어
 
 사용자 명령은 degree이고 내부에서 radian과 Dynamixel tick으로 자동 변환됩니다.
 
@@ -77,7 +77,7 @@ ros2 topic echo /joint_states
 | `joint1` | 179.296875° / 2040 | -98.456875° ~ 98.543125° |
 | `joint2` | 224.384766° / 2553 | -113.134766° ~ 113.135234° |
 | `joint3` | 208.740234° / 2375 | -103.290234° ~ 103.209766° |
-| `gripper_joint` | 임시 2305 tick | -5° ~ 5° |
+| `gripper_joint` | 355.693359° / 4047 (완전 닫힘) | `0°`(닫힘) ~ 약 `278.91°`(열림) |
 
 한 관절을 3초 동안 5도로 이동:
 
@@ -95,7 +95,11 @@ ros2 topic pub --once /joint_commands_deg \
   "{joint_names: [joint1, joint2, joint3, gripper_joint], positions_deg: [5.0, -5.0, 8.0, 2.0], duration_sec: 3.0}"
 ```
 
-`0°`는 각 모터의 보정된 중앙입니다. 현재 위치와 멀다면 작은 목표를 긴 시간으로 나누어 보내세요. 제한을 벗어난 유한한 degree 명령은 해당 관절의 최소·최대값으로 자동 제한됩니다. 한 관절이 제한에 걸리거나 잘못된 값을 받아도 다른 관절의 명령은 계속 처리됩니다.
+`joint1`~`joint3`의 `0°`는 각 관절의 보정된 중앙이다. 반면 `gripper_joint`는
+완전 닫힘을 `0°` 기준점으로 사용하고, 열린 방향을 양수로 사용한다. 현재 위치와
+멀다면 작은 목표를 긴 시간으로 나누어 보내세요. 제한을 벗어난 유한한 degree 명령은
+해당 관절의 최소·최대값으로 자동 제한됩니다. 한 관절이 제한에 걸리거나 잘못된 값을
+받아도 다른 관절의 명령은 계속 처리됩니다.
 
 ## 선택적 반복 모터 시험
 
@@ -111,17 +115,41 @@ ros2 run robot_arm_controller fish_motion_node --ros-args \
   -p include_gripper:=false
 ```
 
+## 그리퍼 열림 거리(cm) 제어
+
+그리퍼는 `0 cm = 완전 닫힘`, `13 cm = 설정된 안전 최대 열림`으로 명령할 수 있다.
+`gripper_opening_bridge`가 cm 명령을 그리퍼 각도로 변환한 뒤 기존 안전 경로를 그대로
+통과시킨다.
+
+```bash
+ros2 topic pub --once /gripper_opening_cm \
+  robot_arm_controller/msg/GripperCommandCm \
+  "{opening_cm: 5.0, duration_sec: 3.0}"
+```
+
+명령은 `0.0`~`13.0 cm` 범위에서 자동 제한된다. 이 변환은 현재 선형 보정이다.
+링크식 그리퍼의 실제 간격이 중간 위치에서 다르면, 여러 간격 측정값을 이용한 보정표로
+확장해야 한다.
+
 ## 전체 4모터 실행
 
-현재 ID 4는 실행 시 확인한 2305 tick을 임시 0도로 사용하고 `±5°`로 제한됩니다. 현재 USB 포트명을 확인한 뒤 실행합니다.
+그리퍼는 완전 닫힘 위치를 사용자 `0°`로 보정한다. 현재 설정에서 `0°`는 닫힘,
+약 `278.91°`는 열림 끝의 2° 안쪽 안전 제한이다. 현재 USB 포트명을 확인한 뒤
+실행합니다.
 
 ```bash
 ros2 launch robot_arm_bringup ros2_control.launch.py device_name:=/dev/ttyUSB1
 ```
 
-그리퍼 조립 후 절대 최소·최대 각도와 중앙 tick을 다시 측정하여
+그리퍼 조립 후 절대 최소·최대 각도와 **완전 닫힘 기준 tick**을 측정하여
 [`robot_arm_calibration.yaml`](src/robot_arm_bringup/config/robot_arm_calibration.yaml)을
 수정하세요. 이 파일 하나가 Xacro, degree bridge, FSS 궤적 검증에 모두 적용됩니다.
+
+기구물을 새로 조립하거나 링크 길이가 달라졌다면 모터 제한값만 수정하면 충분하지
+않습니다. [`robot_arm.urdf.xacro`](src/robot_arm_bringup/urdf/robot_arm.urdf.xacro)의
+`link1_length`, `link2_length`, `link3_length`와 각 link의 visual/collision geometry,
+질량, 관성도 실제 사양으로 갱신해야 합니다. 이 값은 RViz 표현, MoveIt 2 경로 계획,
+충돌 판정과 동역학 계산의 기준이 됩니다.
 
 표준 radian 궤적은 `/arm_trajectory_controller/joint_trajectory`에 직접 보낼 수도 있습니다.
 
@@ -185,6 +213,7 @@ ros2 topic echo /dynamic_joint_states
 - 모터에는 별도 전원과 U2D2 같은 통신 장치가 필요합니다.
 - 전원을 넣기 전에 로봇을 고정하고 비상정지 수단을 준비하세요.
 - Wizard에서 EEPROM을 변경할 때는 먼저 Torque Enable을 0으로 만드세요.
-- 실제 링크 길이, 관성, 충돌 형상과 그리퍼 제한은 하드웨어 완성 후 반드시 보정하세요.
+- 링크를 변경하거나 재조립했다면 URDF의 길이, 질량, 관성, visual/collision 형상과
+  calibration의 관절 제한을 함께 갱신하세요.
 - 소프트웨어 Bus Watchdog과 torque 해제는 물리 비상정지 회로를 대체하지 않습니다.
 - 실제 링크 치수와 collision geometry가 완성되기 전에는 자동 경로 계획을 사용하지 마세요.

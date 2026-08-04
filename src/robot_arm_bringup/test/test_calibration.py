@@ -27,10 +27,13 @@ def test_relative_limits_are_centered_and_ordered():
     calibration = load_calibration(CALIBRATION)
     names, minimums, maximums, velocities = relative_limits_deg(calibration, True)
     assert names == ["joint1", "joint2", "joint3", "gripper_joint"]
-    assert all(minimum < 0.0 < maximum for minimum, maximum in zip(minimums, maximums))
+    # Arm joints use their mechanical centre as zero.  The gripper instead uses
+    # fully closed as zero, so its permitted range starts at zero.
+    assert all(minimum < 0.0 < maximum for minimum, maximum in zip(minimums[:3], maximums[:3]))
     assert all(velocity > 0.0 for velocity in velocities)
-    assert minimums[3] == pytest.approx(-5.0)
-    assert maximums[3] == pytest.approx(5.0)
+    assert minimums[3] == pytest.approx(0.0)
+    assert maximums[3] == pytest.approx(278.905469)
+    assert calibration["joints"]["gripper_joint"]["max_opening_cm"] == 13.0
 
 
 def test_xacro_receives_every_motor_calibration():

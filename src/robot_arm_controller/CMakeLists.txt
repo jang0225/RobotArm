@@ -20,6 +20,7 @@ find_package(rosidl_default_generators REQUIRED)
 find_package(fss_interfaces QUIET)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/GripperCommandCm.msg"
   "msg/JointCommandDegrees.msg"
 )
 
@@ -39,12 +40,22 @@ target_include_directories(degree_trajectory_bridge PRIVATE include)
 ament_target_dependencies(degree_trajectory_bridge rclcpp trajectory_msgs)
 target_link_libraries(degree_trajectory_bridge "${cpp_typesupport_target}")
 
+add_executable(gripper_opening_bridge src/gripper_opening_bridge.cpp)
+target_compile_features(gripper_opening_bridge PUBLIC cxx_std_17)
+target_include_directories(gripper_opening_bridge PRIVATE include)
+ament_target_dependencies(gripper_opening_bridge rclcpp)
+target_link_libraries(gripper_opening_bridge "${cpp_typesupport_target}")
+
 add_executable(fish_motion_node src/fish_motion_node.cpp)
 target_compile_features(fish_motion_node PUBLIC cxx_std_17)
 target_include_directories(fish_motion_node PRIVATE include)
 ament_target_dependencies(fish_motion_node builtin_interfaces rclcpp trajectory_msgs)
 
-set(robot_arm_controller_targets degree_trajectory_bridge fish_motion_node)
+set(robot_arm_controller_targets
+  degree_trajectory_bridge
+  gripper_opening_bridge
+  fish_motion_node
+)
 
 if(fss_interfaces_FOUND AND controller_manager_msgs_FOUND AND lifecycle_msgs_FOUND)
   add_executable(fss_arm_supervisor_node src/fss_arm_supervisor_node.cpp)

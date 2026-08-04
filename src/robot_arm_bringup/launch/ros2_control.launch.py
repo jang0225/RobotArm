@@ -23,6 +23,8 @@ def generate_launch_description():
     xacro_calibration_arguments = xacro_arguments(calibration)
     arm_names, arm_mins, arm_maxs, _ = relative_limits_deg(calibration, False)
     all_names, all_mins, all_maxs, _ = relative_limits_deg(calibration, True)
+    gripper_index = all_names.index("gripper_joint")
+    gripper_max_opening_cm = calibration["joints"]["gripper_joint"]["max_opening_cm"]
     device_name = LaunchConfiguration("device_name")
     use_gripper = LaunchConfiguration("use_gripper")
     controllers_file = LaunchConfiguration("controllers_file")
@@ -141,6 +143,20 @@ def generate_launch_description():
         condition=IfCondition(use_gripper),
         output="screen",
     )
+    gripper_opening_bridge = Node(
+        package="robot_arm_controller",
+        executable="gripper_opening_bridge",
+        namespace=namespace,
+        parameters=[
+            {
+                "max_opening_cm": gripper_max_opening_cm,
+                "max_opening_deg": all_maxs[gripper_index],
+                "output_topic": "joint_commands_deg",
+            }
+        ],
+        condition=IfCondition(use_gripper),
+        output="screen",
+    )
     diagnostics_arm_only = Node(
         package="robot_arm_hardware",
         executable="dynamixel_diagnostics_node",
@@ -190,6 +206,7 @@ def generate_launch_description():
             joint_state_spawner_inactive,
             degree_bridge_arm_only,
             degree_bridge_with_gripper,
+            gripper_opening_bridge,
             diagnostics_arm_only,
             diagnostics_with_gripper,
             RegisterEventHandler(

@@ -117,6 +117,7 @@ E-stop은 latch된다. 이후 mode가 바뀌어도 torque가 자동으로 켜지
 | 토픽 | 타입 | 용도 |
 |---|---|---|
 | `/robot_arm/joint_commands_deg` | `robot_arm_controller/msg/JointCommandDegrees` | 사용자 degree 명령 |
+| `/robot_arm/gripper_opening_cm` | `robot_arm_controller/msg/GripperCommandCm` | 그리퍼 손가락 간격 명령 |
 | `/robot_arm/requested_joint_trajectory` | `trajectory_msgs/msg/JointTrajectory` | 표준 radian 궤적 요청 |
 | `/robot_arm/joint_states` | `sensor_msgs/msg/JointState` | 관절 측정 상태 |
 | `/robot_arm/fss_supervisor_status` | `std_msgs/msg/String` | 명령 허용·차단 상태 |
@@ -293,10 +294,23 @@ ros2 topic pub --once /robot_arm/joint_commands_deg \
   "{joint_names: [joint1, joint2, joint3], positions_deg: [5.0, 10.0, -5.0], duration_sec: 5.0}"
 ```
 
+### 그리퍼 거리 명령
+
+그리퍼가 포함된 `arm_only:=false` 구성에서는 닫힘을 `0 cm`, 최대 열림을 `13 cm`로
+명령한다.
+
+```bash
+ros2 topic pub --once /robot_arm/gripper_opening_cm \
+  robot_arm_controller/msg/GripperCommandCm \
+  "{opening_cm: 5.0, duration_sec: 3.0}"
+```
+
 이 명령의 처리 흐름:
 
 ```text
-/robot_arm/joint_commands_deg
+/robot_arm/gripper_opening_cm
+  → gripper_opening_bridge
+  → /robot_arm/joint_commands_deg
   → degree_trajectory_bridge
   → /robot_arm/requested_joint_trajectory
   → fss_arm_supervisor_node
