@@ -34,9 +34,9 @@ def test_relative_limits_are_centered_and_ordered():
     # layer maps the public closed=0 command frame onto this range.
     assert all(minimum < 0.0 < maximum for minimum, maximum in zip(minimums[:3], maximums[:3]))
     assert all(velocity > 0.0 for velocity in velocities)
-    assert minimums[3] == pytest.approx(-328.974609375)
-    assert maximums[3] == pytest.approx(-45.966796875)
-    assert calibration["joints"]["gripper_joint"]["max_opening_cm"] == 13.0
+    assert minimums[3] == pytest.approx(118.212890625)
+    assert maximums[3] == pytest.approx(311.484375)
+    assert calibration["joints"]["gripper_joint"]["max_opening_cm"] == 8.65
 
 
 def test_gripper_public_frame_maps_closed_and_open_to_measured_degrees():
@@ -53,8 +53,8 @@ def test_gripper_public_frame_maps_closed_and_open_to_measured_degrees():
     gripper_index = names.index("gripper_joint")
 
     assert command_mins[gripper_index] == pytest.approx(0.0)
-    assert command_maxs[gripper_index] == pytest.approx(283.0078125)
-    assert command_origins[gripper_index] == pytest.approx(-45.966796875)
+    assert command_maxs[gripper_index] == pytest.approx(193.271484375)
+    assert command_origins[gripper_index] == pytest.approx(311.484375)
     assert command_directions[gripper_index] == -1.0
     assert command_origins[gripper_index] == pytest.approx(controller_maxs[gripper_index])
     assert (

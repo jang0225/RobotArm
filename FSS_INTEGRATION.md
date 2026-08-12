@@ -297,7 +297,7 @@ ros2 topic pub --once /robot_arm/joint_commands_deg \
 
 ### 그리퍼 거리 명령
 
-그리퍼가 포함된 `arm_only:=false` 구성에서는 닫힘을 `0 cm`, 최대 열림을 `13 cm`로
+그리퍼가 포함된 `arm_only:=false` 구성에서는 닫힘을 `0 cm`, 최대 열림을 `8.65 cm`로
 명령한다.
 
 ```bash

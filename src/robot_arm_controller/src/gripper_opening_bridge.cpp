@@ -20,9 +20,9 @@ public:
   GripperOpeningBridge()
   : Node("gripper_opening_bridge")
   {
-    max_opening_cm_ = declare_parameter<double>("max_opening_cm", 13.0);
-    closed_position_deg_ = declare_parameter<double>("closed_position_deg", -45.966796875);
-    open_position_deg_ = declare_parameter<double>("open_position_deg", -328.974609375);
+    max_opening_cm_ = declare_parameter<double>("max_opening_cm", 8.65);
+    closed_position_deg_ = declare_parameter<double>("closed_position_deg", 311.484375);
+    open_position_deg_ = declare_parameter<double>("open_position_deg", 118.212890625);
     const auto output_topic = declare_parameter<std::string>(
       "output_topic", "arm_trajectory_controller/joint_trajectory");
     if (!std::isfinite(max_opening_cm_) || !std::isfinite(closed_position_deg_) ||
@@ -79,9 +79,9 @@ private:
       bounded_opening, target_degrees);
   }
 
-  double max_opening_cm_{13.0};
-  double closed_position_deg_{-45.966796875};
-  double open_position_deg_{-328.974609375};
+  double max_opening_cm_{8.65};
+  double closed_position_deg_{311.484375};
+  double open_position_deg_{118.212890625};
   rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr trajectory_publisher_;
   rclcpp::Subscription<robot_arm_controller::msg::GripperCommandCm>::SharedPtr
     opening_subscription_;

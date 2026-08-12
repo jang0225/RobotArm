@@ -40,7 +40,7 @@ public:
     command_directions_ = declare_parameter<std::vector<double>>(
       "command_direction", std::vector<double>{});
     max_duration_sec_ = declare_parameter<double>("max_duration_sec", 120.0);
-    max_gripper_opening_cm_ = declare_parameter<double>("max_gripper_opening_cm", 13.0);
+    max_gripper_opening_cm_ = declare_parameter<double>("max_gripper_opening_cm", 8.65);
     const auto output_topic = declare_parameter<std::string>(
       "output_topic", "/arm_trajectory_controller/joint_trajectory");
 
@@ -256,7 +256,7 @@ private:
   std::vector<double> command_origins_deg_;
   std::vector<double> command_directions_;
   double max_duration_sec_{120.0};
-  double max_gripper_opening_cm_{13.0};
+  double max_gripper_opening_cm_{8.65};
   std::unordered_map<std::string, std::size_t> joint_index_;
   std::unordered_map<std::string, double> current_positions_;
   rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr publisher_;

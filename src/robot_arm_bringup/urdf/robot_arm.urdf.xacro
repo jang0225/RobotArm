@@ -36,8 +36,8 @@
   <xacro:arg name="gripper_joint_expected_drive_mode" default="0"/>
   <xacro:arg name="gripper_joint_zero_ticks" default="2305"/>
   <xacro:arg name="gripper_joint_direction" default="1.0"/>
-  <xacro:arg name="gripper_joint_min_absolute_deg" default="-126.38671875"/>
-  <xacro:arg name="gripper_joint_max_absolute_deg" default="156.62109375"/>
+  <xacro:arg name="gripper_joint_min_absolute_deg" default="320.80078125"/>
+  <xacro:arg name="gripper_joint_max_absolute_deg" default="514.072265625"/>
   <xacro:property name="link1_length" value="$(arg link1_length)"/>
   <xacro:property name="link2_length" value="$(arg link2_length)"/>
   <xacro:property name="link3_length" value="$(arg link3_length)"/>
